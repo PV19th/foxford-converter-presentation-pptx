@@ -1,0 +1,9 @@
+services:
+  app:
+    build: .
+    image: foxford-converter
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/srv/data

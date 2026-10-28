@@ -1,0 +1,15 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# секреты — никогда не в репозиторий
+.env
+
+# материалы уроков и результаты прогонов храним только локально
+test_inputs/*
+!test_inputs/*/
+test_inputs/*/*
+!test_inputs/*/ПОЛОЖИТЬ_СЮДА.txt
+outputs/
+data/
+tmp/

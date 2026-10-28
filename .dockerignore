@@ -1,0 +1,10 @@
+.git
+.env
+**/__pycache__
+**/.DS_Store
+test_inputs
+outputs
+data
+tmp
+docs
+tests
