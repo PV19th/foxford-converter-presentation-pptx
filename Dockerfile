@@ -20,9 +20,10 @@ RUN test -f /usr/share/fonts/truetype/open-sans/OpenSans-Regular.ttf \
 RUN python3 -m venv /venv
 ENV PATH=/venv/bin:$PATH
 
-COPY converter/requirements.txt /tmp/requirements.txt
+COPY converter/requirements.txt /tmp/converter-requirements.txt
+COPY app/requirements.txt /tmp/app-requirements.txt
 COPY constraints.txt /tmp/constraints.txt
-RUN pip install --no-cache-dir -r /tmp/requirements.txt -c /tmp/constraints.txt
+RUN pip install --no-cache-dir -r /tmp/converter-requirements.txt -r /tmp/app-requirements.txt -c /tmp/constraints.txt
 
 WORKDIR /srv
 COPY base/ base/
@@ -32,3 +33,7 @@ COPY app/ app/
 
 # конвертер ищет assets/ со стикерами в CONV_DIR
 ENV CONV_DIR=/srv
+
+EXPOSE 8000
+# один процесс: очередь задач живёт в памяти, soffice — строго по одной задаче
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "1"]

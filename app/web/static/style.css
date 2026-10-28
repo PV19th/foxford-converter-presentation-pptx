@@ -1,0 +1,168 @@
+/* Конвертер презентаций. Минимализм: белое, чёрное, тонкие линии, один акцент. */
+:root {
+  --bg: #fff;
+  --ink: #000;
+  --muted: #6e6e6e;
+  --line: #000;
+  --hair: #e3e3e3;
+  --soft: #f4f4f4;
+  --accent: #ff9900;
+  --accent-ink: #000;
+  --error: #c4320a;
+  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  --gutter: 24px;
+}
+
+* { box-sizing: border-box; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
+button, input, select { font: inherit; color: inherit; }
+a { color: inherit; }
+[hidden] { display: none !important; }
+
+.mono { font-family: var(--mono); font-size: 12px; letter-spacing: .02em; text-transform: uppercase; }
+.muted { color: var(--muted); }
+.caps { text-transform: uppercase; letter-spacing: .06em; }
+
+/* ---------- шапка ---------- */
+.top { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+       height: 48px; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); }
+.top__side { display: flex; gap: 28px; font-size: 13px; text-transform: uppercase; letter-spacing: .06em; }
+.top__side--right { justify-content: flex-end; }
+.brand { font-weight: 700; font-size: 19px; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
+.linkbtn { background: none; border: 0; padding: 0; cursor: pointer; text-transform: uppercase;
+           letter-spacing: .06em; font-size: 13px; }
+.linkbtn:hover, .top a:hover { text-decoration: underline; text-underline-offset: 4px; }
+
+.subbar { display: flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 calc(var(--gutter) - 10px);
+          border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tab { border: 1px solid transparent; background: none; padding: 5px 10px; border-radius: 0;
+       text-transform: uppercase; letter-spacing: .06em; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.tab[aria-pressed="true"] { border-color: var(--ink); }
+.tab:hover { text-decoration: underline; text-underline-offset: 4px; }
+.subbar__label { padding: 0 10px; }
+
+/* ---------- общий каркас ---------- */
+main { max-width: 1280px; margin: 0 auto; padding: 0 var(--gutter) 96px; }
+.hero { text-align: center; padding: 72px 0 56px; }
+h1 { font-size: 26px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0; }
+h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; margin: 0 0 16px; }
+.hero p { margin: 12px 0 0; }
+
+/* ---------- форма ---------- */
+.form { max-width: 760px; margin: 0 auto; border-top: 1px solid var(--line); }
+.row { display: grid; grid-template-columns: 200px 1fr; gap: 24px; padding: 24px 0; border-bottom: 1px solid var(--line); }
+.row__label { padding-top: 4px; }
+.row__label b { display: block; font-family: var(--sans); font-size: 13px; letter-spacing: .06em; margin-top: 4px; }
+
+.drop { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px;
+        min-height: 150px; padding: 20px; border: 1px solid var(--ink); cursor: pointer; text-align: center; }
+.drop:hover, .drop.is-over { background: var(--soft); }
+.drop:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drop__main { text-transform: uppercase; letter-spacing: .06em; font-size: 14px; }
+.drop.has-file .drop__main { text-transform: none; letter-spacing: 0; font-weight: 700; word-break: break-word; }
+
+.seg { display: flex; flex-wrap: wrap; gap: 8px; }
+.seg button { border: 1px solid var(--hair); background: none; padding: 9px 18px; cursor: pointer;
+              text-transform: uppercase; letter-spacing: .06em; font-size: 13px; }
+.seg button[aria-pressed="true"] { border-color: var(--ink); }
+.seg button:hover { border-color: var(--ink); }
+
+.lesson { display: flex; align-items: stretch; width: 180px; border: 1px solid var(--ink); }
+.lesson span { display: flex; align-items: center; padding: 0 2px 0 12px; font-family: var(--mono); font-size: 18px; }
+.lesson input { width: 100%; border: 0; outline: 0; padding: 10px 12px 10px 0; font-family: var(--mono); font-size: 18px; background: none; }
+.lesson:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.hint { margin: 10px 0 0; }
+
+.actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding-top: 28px; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 28px;
+       border: 1px solid var(--ink); background: none; cursor: pointer; text-decoration: none;
+       text-transform: uppercase; letter-spacing: .08em; font-size: 13px; font-weight: 700; }
+.btn--accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn--accent:hover { background: #ffad33; border-color: #ffad33; }
+.btn:not(.btn--accent):hover { background: var(--ink); color: var(--bg); }
+.btn:disabled { opacity: .4; cursor: default; }
+.btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
+.error { color: var(--error); margin: 12px 0 0; }
+
+/* ---------- очередь и ход работы ---------- */
+.panel { max-width: 760px; margin: 0 auto; border-top: 1px solid var(--line); padding-top: 28px; }
+.status { font-size: 22px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; margin: 6px 0 4px; }
+.bar { height: 3px; background: var(--hair); margin: 24px 0; overflow: hidden; }
+.bar i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .4s ease; }
+.steps { list-style: none; margin: 0; padding: 0; border-top: 1px solid var(--line); }
+.steps li { display: grid; grid-template-columns: 48px 1fr auto; align-items: center; padding: 14px 0;
+            border-bottom: 1px solid var(--hair); color: var(--muted); }
+.steps li.is-now { color: var(--ink); }
+.steps li.is-now .mark { background: var(--accent); }
+.steps li.is-done { color: var(--ink); }
+.mark { width: 10px; height: 10px; border: 1px solid currentColor; display: inline-block; }
+.steps li.is-done .mark { background: var(--ink); border-color: var(--ink); }
+.note { margin-top: 24px; }
+
+/* ---------- результат ---------- */
+.result-head { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
+               padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+.result-head .status { font-size: 26px; }
+.result-head .file { margin: 0; word-break: break-word; }
+
+.cols { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.col { padding: 28px 24px 32px; border-left: 1px solid var(--line); min-width: 0; }
+.col:first-child { border-left: 0; padding-left: 0; }
+.col:last-child { padding-right: 0; }
+.col ul { list-style: none; margin: 0; padding: 0; }
+.col li { padding: 8px 0; border-top: 1px solid var(--hair); }
+.col li:first-child { border-top: 0; padding-top: 0; }
+.slide-link { font-family: var(--mono); font-size: 12px; background: none; border: 0; padding: 0; cursor: pointer;
+              text-decoration: underline; text-underline-offset: 3px; margin-right: 8px; }
+.empty { color: var(--muted); margin: 0; }
+.words { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.words span { border: 1px solid var(--ink); padding: 2px 8px; font-size: 13px; }
+
+.checks { padding: 28px 0 32px; border-bottom: 1px solid var(--line); }
+.checks ul { list-style: none; margin: 0; padding: 0; columns: 2; column-gap: 48px; }
+.checks li { break-inside: avoid; padding: 6px 0; }
+.checks label { display: flex; gap: 12px; cursor: pointer; }
+.checks input { appearance: none; flex: none; width: 16px; height: 16px; margin: 3px 0 0; border: 1px solid var(--ink); cursor: pointer; }
+.checks input:checked { background: var(--accent); border-color: var(--accent); }
+.checks input:checked + span { color: var(--muted); text-decoration: line-through; }
+
+.grid-head { display: flex; justify-content: space-between; align-items: baseline; padding: 32px 0 16px; }
+.grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px 20px; }
+.thumb { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; text-align: left; }
+.thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border: 1px solid var(--hair); background: var(--soft); }
+.thumb:hover img { border-color: var(--ink); }
+.thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.thumb__cap { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
+.flag { color: var(--ink); background: var(--accent); padding: 0 5px; }
+
+/* ---------- просмотр слайда ---------- */
+.viewer { position: fixed; inset: 0; z-index: 10; background: var(--bg); display: grid; grid-template-rows: 48px 1fr auto; }
+.viewer__bar { display: flex; justify-content: space-between; align-items: center; padding: 0 var(--gutter); border-bottom: 1px solid var(--line); }
+.viewer__stage { position: relative; display: flex; align-items: center; justify-content: center; padding: 24px 72px; min-height: 0; }
+.viewer__stage img { max-width: 100%; max-height: 100%; border: 1px solid var(--hair); }
+.viewer__nav { position: absolute; top: 50%; transform: translateY(-50%); width: 48px; height: 48px; border: 1px solid var(--ink);
+               background: var(--bg); cursor: pointer; font-size: 18px; }
+.viewer__nav:hover { background: var(--ink); color: var(--bg); }
+.viewer__nav--prev { left: var(--gutter); }
+.viewer__nav--next { right: var(--gutter); }
+.viewer__notes { padding: 0 var(--gutter) 20px; text-align: center; min-height: 20px; }
+
+@media (max-width: 860px) {
+  .cols { grid-template-columns: 1fr; }
+  .col, .col:first-child, .col:last-child { padding: 24px 0; border-left: 0; border-top: 1px solid var(--line); }
+  .col:first-child { border-top: 0; }
+  .grid { grid-template-columns: repeat(2, 1fr); }
+  .checks ul { columns: 1; }
+}
+@media (max-width: 600px) {
+  :root { --gutter: 16px; }
+  .top__side:first-child { display: none; }
+  .top { grid-template-columns: auto 1fr; }
+  .hero { padding: 44px 0 36px; }
+  h1 { font-size: 21px; }
+  .row { grid-template-columns: 1fr; gap: 12px; }
+  .viewer__stage { padding: 16px; }
+  .viewer__nav { top: auto; bottom: 8px; transform: none; }
+}

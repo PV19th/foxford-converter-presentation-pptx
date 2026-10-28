@@ -152,6 +152,11 @@ def check_input(path):
     with zipfile.ZipFile(path) as z:
         if 'ppt/presentation.xml' not in z.namelist():
             raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
+        tag = re.search(rb'<p:sldSz[^>]*>', z.read('ppt/presentation.xml'))
+    size = dict(re.findall(rb'(cx|cy)="(\d+)"', tag.group(0))) if tag else {}
+    # 10×7,5″ — размер нового шаблона: такой файл уже перенесён, повторный перенос его испортит
+    if size == {b'cx': b'9144000', b'cy': b'6858000'}:
+        raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
 
 
 def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step: None):

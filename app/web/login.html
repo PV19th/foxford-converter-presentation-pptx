@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Вход — Конвертер презентаций</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<header class="top">
+  <div class="top__side"></div>
+  <span class="brand">Фоксфорд</span>
+  <div class="top__side"></div>
+</header>
+<div class="subbar"><span class="subbar__label mono muted">Конвертер презентаций</span></div>
+<main>
+  <div class="hero"><h1>Вход</h1></div>
+  <form class="form" method="post" action="/login">
+    <div class="row">
+      <label class="row__label mono muted" for="password">01<b>Пароль</b></label>
+      <div>
+        <div class="lesson" style="width:100%"><input id="password" name="password" type="password"
+             autocomplete="current-password" autofocus required style="padding-left:12px;font-family:var(--sans);font-size:16px"></div>
+        <p class="error" id="error" role="alert" hidden></p>
+        <p class="hint mono muted">Пароль выдаёт автор сайта</p>
+      </div>
+    </div>
+    <div class="actions"><button class="btn btn--accent" type="submit">Войти</button></div>
+  </form>
+</main>
+<script>
+  var e = new URLSearchParams(location.search).get('e');
+  if (e) {
+    var el = document.getElementById('error');
+    el.textContent = e === 'wait' ? 'Слишком много попыток. Подождите 10 минут.' : 'Неверный пароль.';
+    el.hidden = false;
+  }
+</script>
+</body>
+</html>
