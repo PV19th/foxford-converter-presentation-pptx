@@ -52,7 +52,7 @@
     var grades = currentTemplate().grades;
     var box = $('grades'); box.innerHTML = '';
     grades.forEach(function (g) {
-      var b = el('button', { type: 'button', 'data-grade': g }, g + ' класс');
+      var b = el('button', { type: 'button', 'data-grade': g, 'aria-label': g + ' класс' }, g);
       b.addEventListener('click', function () { selectGrade(g); });
       box.appendChild(b);
     });
@@ -66,7 +66,7 @@
     rows.innerHTML = ''; state.choices = {};
     t.choices.forEach(function (c, ci) {
       var row = el('div', { class: 'row' });
-      var lab = el('div', { class: 'row__label mono muted' }, ('0' + (4 + ci)).slice(-2));
+      var lab = el('div', { class: 'row__label mono muted' }, ('0' + (5 + ci)).slice(-2));
       lab.appendChild(el('b', null, c.label));
       var body = el('div'), grid = el('div', { class: 'titles', role: 'radiogroup', 'aria-label': c.label });
       c.slides.forEach(function (n, i) {
@@ -110,8 +110,8 @@
     $('drop').classList.add('has-file');
     $('drop-main').textContent = f.name;
     $('drop-sub').textContent = sizeMb(f.size) + ' · нажмите, чтобы заменить';
-    // «5.21 Религия….pptx» → 5 класс, урок 21
-    var m = /^(\d{1,2})\.(\d{1,2})(?!\d)/.exec(f.name);
+    // «5.21 Религия….pptx», «Урок 9.23 Конституция….pptx» → класс и номер урока
+    var m = /(?:^|\D)(\d{1,2})\.(\d{1,2})(?!\d)/.exec(f.name);
     if (m && currentTemplate().grades.indexOf(m[1]) >= 0) { selectGrade(m[1]); $('lesson').value = String(+m[2]); }
   }
 
@@ -143,6 +143,7 @@
     var fd = new FormData();
     fd.append('file', state.file); fd.append('template', state.template); fd.append('lesson', lesson);
     fd.append('choices', JSON.stringify(state.choices));
+    fd.append('subject', $('subject').value.trim());
 
     showProgress({ filename: state.file.name, lesson: lesson, status: 'upload' });
     var xhr = new XMLHttpRequest();
@@ -243,7 +244,8 @@
   function showResult(j) {
     var r = j.result;
     show('result');
-    $('r-meta').textContent = r.template_name + ' · урок ' + r.lesson + ' · ' + String(r.size_mb).replace('.', ',') + ' МБ';
+    $('r-meta').textContent = r.template_name + ' · ' + (r.subject || '') + ' · урок ' + r.lesson + ' · ' +
+      String(r.size_mb).replace('.', ',') + ' МБ';
     $('r-file').textContent = j.filename;
     $('r-download').href = '/api/jobs/' + j.id + '/download';
 
@@ -319,7 +321,7 @@
   function reset() {
     clearTimeout(pollTimer); job = null; state.file = null;
     history.replaceState(null, '', location.pathname);
-    $('file').value = ''; $('lesson').value = '';
+    $('file').value = ''; $('lesson').value = ''; $('subject').value = '';
     $('drop').classList.remove('has-file');
     $('drop-main').textContent = 'Перетащите .pptx сюда';
     $('drop-sub').textContent = dropHint();
@@ -334,6 +336,7 @@
   api('GET', '/api/meta').then(function (d) {
     meta = d;
     $('drop-sub').textContent = dropHint();
+    meta.subjects.forEach(function (s) { $('subjects').appendChild(el('option', { value: s })); });
     renderTemplates(); bindForm(); bindViewer();
     document.querySelectorAll('[data-new]').forEach(function (b) { b.addEventListener('click', reset); });
     $('copy-link').addEventListener('click', function () {

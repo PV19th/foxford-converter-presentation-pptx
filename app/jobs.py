@@ -37,11 +37,13 @@ def result_path(jid): return _dir(jid) / 'result.pptx'
 
 
 def submit(job):
+    _save(job)
     with _lock:
         _jobs[job['id']] = job
         _pending.append(job['id'])
     _queue.put(job['id'])
-    log.info('задача %s: в очереди (%s, %s, %s, %s)', job['id'], job['filename'], job['template'], job['lesson'], job['choices'])
+    log.info('задача %s: в очереди (%s, %s, %s, %s, %s)', job['id'], job['filename'], job['template'], job['lesson'],
+             job.get('subject'), job['choices'])
 
 
 def discard(jid): shutil.rmtree(_dir(jid), ignore_errors=True)
@@ -74,7 +76,7 @@ def _worker():
         def progress(step):
             job['step'] = step; _save(job)
         try:
-            pipeline.process(source_path(jid), _dir(jid), job['lesson'], job['template'], progress, job.get('choices'))
+            pipeline.process(source_path(jid), _dir(jid), job['lesson'], job['template'], progress, job.get('choices'), job.get('subject'))
             job.update(status='done', step=None)
             for name in ('source.pptx', 'converted.pptx'): (_dir(jid) / name).unlink(missing_ok=True)
         except pipeline.ConversionError as e:

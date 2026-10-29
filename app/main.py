@@ -89,10 +89,10 @@ def index(): return FileResponse(WEB / 'index.html')
 
 @app.get('/api/meta')
 def meta():
-    tpls = [{'id': k, 'name': v['name'], 'grades': sorted(v['grades']),
+    tpls = [{'id': k, 'name': v['name'], 'grades': pipeline.profile_grades(v),
              'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()]}
             for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))]
-    return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS,
+    return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS, 'subjects': texts.SUBJECTS,
             'contact': config.SUPPORT_CONTACT, 'max_upload_mb': config.MAX_UPLOAD_MB,
             'ttl_hours': config.JOB_TTL_HOURS}
 
@@ -102,7 +102,7 @@ def _bad(msg): return JSONResponse({'error': msg}, 400)
 
 @app.post('/api/jobs')
 async def create_job(file: UploadFile = File(...), template: str = Form(...), lesson: str = Form(...),
-                     choices: str = Form('{}')):
+                     choices: str = Form('{}'), subject: str = Form('')):
     # macOS присылает «й» двумя символами — приводим, чтобы имя скачанного файла было обычным
     name = unicodedata.normalize('NFC', Path(file.filename or 'presentation.pptx').name)
     if not name.lower().endswith('.pptx'):
@@ -111,13 +111,14 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
         return _bad('Номер урока нужно писать так: класс.урок, например 5.21.')
     tpl = pipeline.load_templates().get(template)
     if tpl is None: return _bad('Такого шаблона нет.')
-    if lesson.split('.')[0] not in tpl['grades']:
+    if pipeline.grade_settings(tpl, lesson.split('.')[0]) is None:
         return _bad('Шаблон «%s» пока не поддерживает этот класс.' % tpl['name'])
     try:
         choices = {str(k): int(v) for k, v in json.loads(choices).items()}
         pipeline.check_choices(tpl, choices)
     except (ValueError, AttributeError, pipeline.ConversionError):
         return _bad('Такого варианта слайда нет. Обновите страницу.')
+    subject = re.sub(r'\s+', ' ', subject).strip()[:40]
     job = jobs.create(name, template, lesson, choices)
     limit, size = config.MAX_UPLOAD_MB * 1024 * 1024, 0
     with open(jobs.source_path(job['id']), 'wb') as f:
@@ -131,6 +132,10 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
         pipeline.check_input(jobs.source_path(job['id']))
     except pipeline.ConversionError as e:
         jobs.discard(job['id']); return _bad(str(e))
+    job['subject'] = subject or pipeline.detect_subject(jobs.source_path(job['id']), texts.SUBJECTS)
+    if not job['subject']:
+        jobs.discard(job['id'])
+        return _bad('Не нашли предмет на титуле старой презентации — впишите его в поле «Предмет».')
     jobs.submit(job)
     return {'id': job['id']}
 

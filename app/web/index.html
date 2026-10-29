@@ -46,6 +46,15 @@
           <p class="hint mono muted">Если номер есть в имени файла, он подставится сам</p>
         </div>
       </div>
+      <div class="row">
+        <div class="row__label mono muted">04<b>Предмет</b></div>
+        <div>
+          <input class="field" id="subject" list="subjects" maxlength="40" autocomplete="off" aria-label="Предмет"
+                 placeholder="Например, Биология">
+          <datalist id="subjects"></datalist>
+          <p class="hint mono muted">Можно оставить пустым — предмет подставится из старой презентации</p>
+        </div>
+      </div>
       <div id="choice-rows"></div>  <!-- варианты слайдов шаблона: титул, прощание… -->
       <p class="error" id="form-error" role="alert" hidden></p>
       <div class="actions">

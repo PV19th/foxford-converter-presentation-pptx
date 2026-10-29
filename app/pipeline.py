@@ -12,7 +12,7 @@ from PIL import Image
 ROOT = Path(__file__).resolve().parent.parent
 CONVERTER = ROOT / 'converter'
 TEMPLATES = ROOT / 'templates'
-LESSON_RE = re.compile(r'^(5|6)\.\d{1,2}$')
+LESSON_RE = re.compile(r'^(5|6|7|8|9|10|11)\.\d{1,2}$')
 SIZE_LIMIT_MB = '18.5'
 DEFAULT_TEMPLATE = 'segment-5-11'
 
@@ -32,8 +32,18 @@ def load_templates():
     return out
 
 
+def grade_settings(profile, grade):
+    """Настройки класса; классы из "grade_aliases" берут настройки другого класса (7–11 → как 6)."""
+    grade = profile.get('grade_aliases', {}).get(grade, grade)
+    return profile['grades'].get(grade)
+
+
+def profile_grades(profile):
+    return sorted(set(profile['grades']) | set(profile.get('grade_aliases', {})), key=int)
+
+
 def converter_env(profile, grade, choices=None):
-    g = profile['grades'][grade]
+    g = grade_settings(profile, grade)
     env = dict(os.environ, CONV_DIR=str(ROOT), CONV_BASE=str(ROOT / g['base']))
     env.pop('CONV_DONOR', None)
     donor = dict(g.get('donor', {}))
@@ -46,6 +56,41 @@ def ensure_base(template_id):
     """Профили на фирменном шаблоне собирают свою базу скриптом (быстро, если база свежая)."""
     if 'base_recipe' in load_templates()[template_id]:
         run([sys.executable, str(ROOT / 'tools/build_base.py'), str(TEMPLATES / template_id)], 'сборка базы шаблона')
+
+
+def _shape_texts(z, n):
+    """Тексты фигур слайда n (каждая фигура — одной строкой)."""
+    from lxml import etree
+    try: root = etree.fromstring(z.read('ppt/slides/slide%d.xml' % n))
+    except KeyError: return None
+    out = []
+    for sp in root.iter('{http://schemas.openxmlformats.org/presentationml/2006/main}sp'):
+        out.append(''.join(t.text or '' for t in sp.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}t')).strip())
+    return out
+
+
+def detect_subject(pptx, subjects):
+    """Предмет из тега на титуле старой презентации («Обществознание») или None."""
+    with zipfile.ZipFile(pptx) as z:
+        for n in range(1, 7):
+            texts = _shape_texts(z, n)
+            if texts is None: break
+            hit = next((t for t in texts if t in subjects), None)
+            if hit: return hit
+    return None
+
+
+def set_subject(pptx, subject):
+    """Конвертер ставит на титул тег «История»; для других предметов меняем его текст."""
+    from pptx import Presentation
+    A_ = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+    p = Presentation(pptx)
+    for sp in p.slides[0]._element.iter('{http://schemas.openxmlformats.org/presentationml/2006/main}sp'):
+        ts = list(sp.iter(A_ + 't'))
+        if ''.join(t.text or '' for t in ts).strip() == 'История':
+            ts[0].text = subject
+            for t in ts[1:]: t.text = ''
+    p.save(pptx)
 
 
 def find_stubs(pptx, phrases):
@@ -173,9 +218,15 @@ def check_input(path):
         if 'ppt/presentation.xml' not in z.namelist():
             raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
         tag = re.search(rb'<p:sldSz[^>]*>', z.read('ppt/presentation.xml'))
-    size = dict(re.findall(rb'(cx|cy)="(\d+)"', tag.group(0))) if tag else {}
-    # 10×7,5″ — размер нового шаблона: такой файл уже перенесён, повторный перенос его испортит
+        size = dict(re.findall(rb'(cx|cy)="(\d+)"', tag.group(0))) if tag else {}
+        old_nav = any('Вернуться к навигации' in ' '.join(_shape_texts(z, n) or []) for n in range(1, 6))
+    # 10×7,5″ — размер нового шаблона. Но такой же размер у старого шаблона уроков 7–11 классов
+    # (с кнопками «Вернуться к навигации») — его конвертер пока не умеет
     if size == {b'cx': b'9144000', b'cy': b'6858000'}:
+        if old_nav:
+            raise ConversionError('Эта презентация сделана в старом шаблоне другого вида (слайд 10×7,5″, кнопки '
+                                  '«Вернуться к навигации»). Конвертер пока умеет переносить только старый шаблон '
+                                  'уроков 5–6 классов (слайд 7,9×5,6″). Пришлите этот файл автору сайта.')
         raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
 
 
@@ -187,7 +238,7 @@ def check_choices(profile, choices):
             raise ConversionError('У шаблона «%s» нет такого варианта слайда.' % profile['name'])
 
 
-def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step: None, choices=None):
+def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step: None, choices=None, subject=None):
     """Обрабатывает одну презентацию. В outdir появятся result.pptx, result.json, slides/, thumbs/, contact.jpg."""
     # абсолютные пути: шаги конвертера работают из папки converter/
     src, outdir = Path(src).resolve(), Path(outdir).resolve()
@@ -198,7 +249,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     if template not in templates: raise ConversionError('Неизвестный шаблон: %s.' % template)
     profile = templates[template]
     grade = lesson.split('.')[0]
-    if grade not in profile['grades']:
+    if grade_settings(profile, grade) is None:
         raise ConversionError('Шаблон «%s» пока не поддерживает %s класс.' % (profile['name'], grade))
     check_choices(profile, choices)
     check_input(src)
@@ -211,6 +262,9 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     out = run([sys.executable, 'convert.py', str(source), str(raw), lesson], 'конвертация',
               cwd=CONVERTER, env=converter_env(profile, grade, choices))
     slides = parse_report(out)
+    from . import texts
+    subject = subject or detect_subject(source, texts.SUBJECTS) or 'История'
+    if subject != 'История': set_subject(raw, subject)
     progress('shrink')
     run([sys.executable, 'shrink.py', str(raw), str(result), SIZE_LIMIT_MB], 'сжатие', cwd=CONVERTER)
     progress('verify')
@@ -220,7 +274,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     previews = render(result, outdir)
     stickers, checks = manual_notes(slides)
     checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', [])), key=lambda c: c['slide'])
-    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'choices': choices or {},
+    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'choices': choices or {}, 'subject': subject,
             'slides': slides, 'previews': previews, 'missing': missing, 'extra': extra,
             'stickers': stickers, 'checks': checks,
             'size_mb': round(result.stat().st_size / 1e6, 1)}
@@ -237,13 +291,14 @@ def main():
     ap = argparse.ArgumentParser(description='Перенос старой презентации в новый шаблон')
     ap.add_argument('src'); ap.add_argument('outdir'); ap.add_argument('lesson', help='класс.урок, например 5.21')
     ap.add_argument('--template', default=DEFAULT_TEMPLATE)
+    ap.add_argument('--subject', help='предмет для тега на титуле (по умолчанию — из старой презентации)')
     ap.add_argument('--choice', action='append', default=[], metavar='КЛЮЧ=НОМЕР',
                     help='вариант слайда шаблона, например title=9 или bye=128')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     try:
         d = process(a.src, a.outdir, a.lesson, a.template, progress=lambda s: log.info('шаг: %s', s),
-                    choices=parse_choices(a.choice))
+                    choices=parse_choices(a.choice), subject=a.subject)
     except ConversionError as e:
         print('ОШИБКА:', e, file=sys.stderr); sys.exit(1)
     print('слайдов:', len(d['previews']), '| размер МБ:', d['size_mb'])
