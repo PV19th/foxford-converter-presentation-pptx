@@ -58,34 +58,49 @@ def ensure_base(template_id):
         run([sys.executable, str(ROOT / 'tools/build_base.py'), str(TEMPLATES / template_id)], 'сборка базы шаблона')
 
 
-def _shape_texts(z, n):
-    """Тексты фигур слайда n (каждая фигура — одной строкой)."""
-    from lxml import etree
-    try: root = etree.fromstring(z.read('ppt/slides/slide%d.xml' % n))
-    except KeyError: return None
-    out = []
-    for sp in root.iter('{http://schemas.openxmlformats.org/presentationml/2006/main}sp'):
-        out.append(''.join(t.text or '' for t in sp.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}t')).strip())
-    return out
+P_ = '{http://schemas.openxmlformats.org/presentationml/2006/main}'
+A_ = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
+
+
+def _sp_text(sp):
+    return ' '.join(''.join(t.text or '' for t in sp.iter(A_ + 't')).split())
 
 
 def detect_subject(pptx, subjects):
-    """Предмет из тега на титуле старой презентации («Обществознание») или None."""
-    with zipfile.ZipFile(pptx) as z:
-        for n in range(1, 7):
-            texts = _shape_texts(z, n)
-            if texts is None: break
-            hit = next((t for t in texts if t in subjects), None)
-            if hit: return hit
+    """Предмет из тега на титуле старой презентации или None.
+    Титул бывает не первым слайдом (старый шаблон 10×7,5″): ищем в первых 8 слайдах тег из списка,
+    а если его нет — тег слева от «N класс» в той же строке («English», «Алгебра»)."""
+    from pptx import Presentation
+    for s in list(Presentation(pptx).slides)[:8]:
+        sps = [sp for sp in s._element.iter(P_ + 'sp')]
+        hit = next((_sp_text(sp) for sp in sps if _sp_text(sp) in subjects), None)
+        if hit: return hit
+        grade = next((sp for sp in sps if re.fullmatch(r'\d{1,2} ?класс', _sp_text(sp))), None)
+        if grade is None: continue
+        box = lambda sp: next(((int(o.get('x')), int(o.get('y'))) for o in sp.iter(A_ + 'off')), None)
+        g = box(grade)
+        left = [(g[0] - b[0], _sp_text(sp)) for sp in sps if sp is not grade and _sp_text(sp)
+                and (b := box(sp)) and abs(b[1] - g[1]) < 150000 and b[0] < g[0]] if g else []
+        if left: return min(left)[1]
     return None
 
 
-def set_subject(pptx, subject):
+def detect_lesson(pptx):
+    """Номер урока «класс.урок» по тегам титула («9 класс» и «Урок 14» / «Lesson 14») или None."""
+    from pptx import Presentation
+    for s in list(Presentation(pptx).slides)[:8]:
+        texts = [_sp_text(sp) for sp in s._element.iter(P_ + 'sp')]
+        g = next((m.group(1) for t in texts if (m := re.fullmatch(r'(\d{1,2}) ?класс', t))), None)
+        n = next((m.group(1) for t in texts if (m := re.fullmatch(r'(?:Урок|Занятие|Lesson) (\d{1,2})', t))), None)
+        if g and n: return '%s.%s' % (g, n)
+    return None
+
+
+def set_subject(pptx, subject, slide_no=1):
     """Конвертер ставит на титул тег «История»; для других предметов меняем его текст."""
     from pptx import Presentation
-    A_ = '{http://schemas.openxmlformats.org/drawingml/2006/main}'
     p = Presentation(pptx)
-    for sp in p.slides[0]._element.iter('{http://schemas.openxmlformats.org/presentationml/2006/main}sp'):
+    for sp in p.slides[slide_no - 1]._element.iter(P_ + 'sp'):
         ts = list(sp.iter(A_ + 't'))
         if ''.join(t.text or '' for t in ts).strip() == 'История':
             ts[0].text = subject
@@ -217,16 +232,9 @@ def check_input(path):
     with zipfile.ZipFile(path) as z:
         if 'ppt/presentation.xml' not in z.namelist():
             raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
-        tag = re.search(rb'<p:sldSz[^>]*>', z.read('ppt/presentation.xml'))
-        size = dict(re.findall(rb'(cx|cy)="(\d+)"', tag.group(0))) if tag else {}
-        old_nav = any('Вернуться к навигации' in ' '.join(_shape_texts(z, n) or []) for n in range(1, 6))
-    # 10×7,5″ — размер нового шаблона. Но такой же размер у старого шаблона уроков 7–11 классов
-    # (с кнопками «Вернуться к навигации») — его конвертер пока не умеет
-    if size == {b'cx': b'9144000', b'cy': b'6858000'}:
-        if old_nav:
-            raise ConversionError('Эта презентация сделана в старом шаблоне другого вида (слайд 10×7,5″, кнопки '
-                                  '«Вернуться к навигации»). Конвертер пока умеет переносить только старый шаблон '
-                                  'уроков 5–6 классов (слайд 7,9×5,6″). Пришлите этот файл автору сайта.')
+        themes = b' '.join(z.read(n) for n in z.namelist() if n.startswith('ppt/theme/theme'))
+    # тема нового шаблона называется «Шаблон 5–11 (2026) — Фоксфорд»
+    if 'Шаблон 5–11 (2026)'.encode('utf8') in themes:
         raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
 
 
@@ -245,6 +253,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     outdir.mkdir(parents=True, exist_ok=True)
     if not LESSON_RE.match(lesson):
         raise ConversionError('Номер урока нужно писать так: класс.урок, например 5.21 или 6.18.')
+    lesson = '%s.%d' % (lesson.split('.')[0], int(lesson.split('.')[1]))  # «9.07» → «Урок 7»
     templates = load_templates()
     if template not in templates: raise ConversionError('Неизвестный шаблон: %s.' % template)
     profile = templates[template]
@@ -264,7 +273,8 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     slides = parse_report(out)
     from . import texts
     subject = subject or detect_subject(source, texts.SUBJECTS) or 'История'
-    if subject != 'История': set_subject(raw, subject)
+    title_no = next((r['slide'] for r in slides if r['kind'] == 'title'), 1)
+    if subject != 'История': set_subject(raw, subject, title_no)
     progress('shrink')
     run([sys.executable, 'shrink.py', str(raw), str(result), SIZE_LIMIT_MB], 'сжатие', cwd=CONVERTER)
     progress('verify')

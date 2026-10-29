@@ -69,8 +69,7 @@ def clean_title(s):
 
 
 def clean_divider(s):
-    for el in list(s.shapes._spTree.iter(P + 'sp')):
-        if ph_type(el) == 'subTitle': el.getparent().remove(el)
+    """Описание-заглушку «Добавь описание…» оставляем: конвертер подставит описание из исходника или уберёт её."""
 
 
 def build(profile_dir):

@@ -11,6 +11,12 @@ DONOR = dict(title=1, plan=2, wait=4, summary=10, reflection=31, links=33, bye=3
 if os.environ.get('CONV_DONOR'):
     DONOR.update(json.loads(os.environ['CONV_DONOR']))
 
+# Старый шаблон 10×7,5″ (уроки 6–11 классов разных предметов): слайд того же размера, что новый, кнопки
+# «Вернуться к навигации», ярлыки «Теория» / «Групповая работа» внизу слайда, служебные слайды до титула.
+# Правила для него включаются флагом WIDE; старый шаблон 5–6 классов (8,27×5,9″) переносится как раньше.
+WIDE = False
+TITLE_N = 1  # номер титульного слайда в исходнике
+
 
 # ---------------------------------------------------------------- стикеры
 def sticker(name):
@@ -29,12 +35,12 @@ def slide_title_info(s):
         if etree.QName(el).localname != 'sp': continue
         b = bbox(el)
         ph = el.find('p:nvSpPr/p:nvPr/p:ph', NS)
-        is_ph_title = ph is not None and ph.get('type') in ('title',) and ph.get('idx') in (None, '0')
+        is_ph_title = ph is not None and ph.get('type') in ('title',) and ph.get('idx') in ((None, '0', '4294967295') if WIDE else (None, '0'))
         if b is None:
             if is_ph_title: cands.append((0, el))
             continue
         if b[0] >= SRC_W: continue
-        if b[1] < int(0.55 * IN) and b[3] < int(1.0 * IN):
+        if b[1] < int(0.55 * IN) and b[3] < int((1.4 if WIDE else 1.0) * IN):
             szs = [int(r.get('sz')) for r in el.iter(A + 'rPr') if r.get('sz')]
             if is_ph_title or (szs and max(szs) >= 2000) or (not szs and not text_of(el).strip()):
                 if el.find('p:spPr/a:solidFill', NS) is None:
@@ -70,7 +76,10 @@ def classify(s, i):
         h = img_hash(s, pic)
         if h: hs.add(h)
     t = all_text(s)
-    if i == 1: return 'title'
+    if i == TITLE_N: return 'title'
+    if WIDE:
+        k = classify_wide(s, title, t)
+        if k: return k
     if 'УВИДИМСЯ' in t: return 'bye'
     if 'faa3488e67' in hs or '05467b9d2c' in hs: return 'divider'
     tl = title.lower()
@@ -89,6 +98,94 @@ def classify(s, i):
         ar = sorted(bbox(p)[2] * bbox(p)[3] for p in pics)
         if len(pics) == 1 or (len(pics) == 2 and ar[0] > 0.6 * ar[1]): return 'think'
     return 'content'
+
+
+# ---------------------------------------------------------------- старый шаблон 10×7,5″
+WIDE_PLAN = ('план урока', 'что обсудим', 'о чем поговорим', 'о чём поговорим', 'сегодня на уроке',
+             'by the end of this lesson')
+
+
+def find_title_slide(slides):
+    """Титул — первый слайд с тегом «N класс»; до него бывают служебные слайды (орг. моменты, «Как дела с ДЗ»)."""
+    for i, s in enumerate(slides[:8], 1):
+        if any(re.fullmatch(r'\d{1,2}\s*класс', text_of(el).strip()) for el in s.shapes._spTree.iter(P + 'sp')):
+            return i
+    for i, s in enumerate(slides[:8], 1):
+        if get_ph(s, 'ctrTitle') is not None: return i
+    return 1
+
+
+def is_footer(b):
+    """Низ слайда старого шаблона 10×7,5″: ярлык типа задания («Теория», «Групповая работа») с иконкой,
+    номер слайда. В новом шаблоне таких ярлыков нет — не переносим."""
+    return WIDE and b is not None and b[1] >= int(6.5 * IN)
+
+
+def classify_wide(s, title, t):
+    tu = t.upper()
+    if re.search(r'УВИДИМСЯ|ДО ВСТРЕЧИ|ДО СВИДАНИЯ|BYE FOR NOW', tu): return 'bye'
+    if DONOR.get('rating') and re.search(r'КАК ВЫ ОЦЕНИВАЕТЕ УРОК|КАК ВАМ УРОК', tu): return 'rating'
+    if any(text_of(el).strip().lower().startswith(('использованные источники', 'использованные ресурсы'))
+           for el in s.shapes._spTree.iter(P + 'sp')): return 'links'
+    tl = title.lower()
+    if tl.startswith(WIDE_PLAN): return 'plan' if len(plan_rows(s)) >= 2 else 'content'
+    if tl.startswith(('обобщ', 'итоги урока')): return 'summary'
+    if not title and wide_divider(s): return 'divider'
+    return None
+
+
+def wide_notes(src, i, kind):
+    """Что методисту проверить на слайде старого шаблона 10×7,5″ (строки отчёта)."""
+    notes = []
+    if i < TITLE_N: notes.append('в старой презентации слайд стоял до титула — проверьте, нужен ли он здесь')
+    if kind == 'title':
+        sps = [(el, bbox(materialize_sp(src, el))) for el in src.shapes._spTree.iter(P + 'sp')]
+        grade = next((b for el, b in sps if b and re.fullmatch(r'\d{1,2}\s*класс', text_of(el).strip())), None)
+        rest = []
+        for el, b in sps:
+            t = re.sub(r'\s+', ' ', para_text(el).replace('\n', ' ')).strip()
+            if not t or el is get_ph(src, 'ctrTitle') or 'навигации' in t or is_offslide(b): continue
+            if grade and b and abs(b[1] - grade[1]) < 0.15 * IN: continue  # теги «предмет · класс · урок»
+            rest.append(t[:80])
+        if rest: notes.append('текст со старого титула не перенесён: «%s»' % '»; «'.join(rest))
+    return notes
+
+
+def max_sz(el):
+    return max([int(r.get('sz')) for r in el.iter(A + 'rPr') if r.get('sz')] + [0])
+
+
+def wide_divider(s):
+    """Отбивка раздела: крупная надпись без заголовка вверху и почти без текста («Vocabulary», «Обобщение»,
+    «ПЕРЕМЕНА»). → (название, описание) или None."""
+    items = src_items_by_y(s, lambda ne, el: text_of(ne).strip() and 'навигации' not in text_of(ne))
+    if not items or len(items) > 2: return None
+    head = get_ph(s, 'ctrTitle')
+    if head is None or not text_of(head).strip():
+        big = [x for x in items if max_sz(x[3]) >= 2800]
+        if not big: return None
+        head = big[0][3]
+    rest = [x for x in items if x[3] is not head]
+    if rest and (len(text_of(rest[0][2])) > 200 or rest[0][3].find('.//a:hlinkClick', NS) is not None): return None
+    one = lambda el: re.sub(r'\s+', ' ', para_text(el).replace('\n', ' ')).strip()
+    return one(head), (one(rest[0][2]) if rest else '')
+
+
+def plan_rows(src):
+    """Пункты плана: вторая колонка таблицы; в старом шаблоне 10×7,5″ — ещё и текст рядом с номерами «01», «1»."""
+    rows = []
+    for gf in src._element.iter(P + 'graphicFrame'):
+        for tr in gf.iter(A + 'tr'):
+            cells = tr.findall('a:tc', NS)
+            texts = [text_of(c).strip() for c in cells]
+            if len(texts) >= 2 and texts[1]:
+                rows.append(para_text(cells[1]).replace('\n', ' ').strip())
+    if rows or not WIDE: return rows
+    _, tels = slide_title_info(src)
+    its = src_items_by_y(src, lambda ne, el: el not in tels and text_of(ne).strip() and 'навигации' not in text_of(ne))
+    nums = [x for x in its if re.fullmatch(r'\d{1,2}', text_of(x[2]).strip())]
+    if len(nums) < 2: return []
+    return [re.sub(r'\s+', ' ', para_text(x[2]).replace('\n', ' ')).strip() for x in its if x not in nums]
 
 
 # ---------------------------------------------------------------- материализация текста
@@ -319,7 +416,8 @@ class Item:
     def b(self): return bbox(self.el)
 
 
-def transform_box(b, sy0, k=K, clamp=True):
+def transform_box(b, sy0, k=None, clamp=True):
+    k = K if k is None else k
     x, y, w, h = b
     nx, ny, nw, nh = TW / 2 + (x - SRC_W / 2) * k, CT + (y - sy0) * k, w * k, h * k
     if not clamp: return [nx, ny, nw, nh]
@@ -362,7 +460,7 @@ def transfer_content(bld, src, dst, report):
         b = bbox(el)
         if b is None and etree.QName(el).localname == 'sp' and el.find('p:nvSpPr/p:nvPr/p:ph', NS) is not None:
             b = bbox(materialize_sp(src, el))
-        if is_offslide(b): continue
+        if is_offslide(b) or is_footer(b): continue
         tops.append(b[1])
     sy0 = min([int(0.75 * IN)] + tops) if tops else int(0.75 * IN)
     pics_src = []
@@ -374,7 +472,7 @@ def transfer_content(bld, src, dst, report):
             if php is not None and php.get('type') in ('sldNum', 'dt', 'ftr'): continue
             ne = materialize_sp(src, el)
             b = bbox(ne)
-            if is_offslide(b): continue
+            if is_offslide(b) or is_footer(b): continue
             txt = text_of(ne).strip()
             if 'ЭТО ВАЖНО' in txt.upper() and len(txt) < 15:
                 badges.append(list(b)); continue
@@ -393,7 +491,7 @@ def transfer_content(bld, src, dst, report):
         elif tag == 'pic':
             h = img_hash(src, el)
             b = bbox(el)
-            if is_offslide(b): continue
+            if is_offslide(b) or is_footer(b): continue
             if h in DECOR_SKIP: continue
             if h in DECOR_VAZHNO: badges.append(list(b)); continue
             if h in DECOR_Q: qmarks.append(list(b)); continue
@@ -402,11 +500,11 @@ def transfer_content(bld, src, dst, report):
             items.append(Item(ne, 'pic')); items[-1].blank_bottom = blank_bottom_frac(src, el)
         elif tag == 'cxnSp':
             ne = copy.deepcopy(el)
-            if is_offslide(bbox(ne)): continue
+            if is_offslide(bbox(ne)) or is_footer(bbox(ne)): continue
             items.append(Item(ne, 'cxn'))
         elif tag == 'grpSp':
             ne = copy.deepcopy(el)
-            if is_offslide(bbox(ne)): continue
+            if is_offslide(bbox(ne)) or is_footer(bbox(ne)): continue
             kids = [c for c in ne.iter(P + 'sp', P + 'pic', P + 'cxnSp')]
             if len(kids) >= 5 and all(etree.QName(c).localname == 'sp' and not text_of(c).strip() for c in kids): continue
             items.append(Item(ne, 'grp')); items[-1].src = el
@@ -491,6 +589,9 @@ def transfer_content(bld, src, dst, report):
                 bp_ = el.find('p:txBody/a:bodyPr', NS)
                 if bp_ is not None: bp_.set('anchor', 't' if it.sb[1] >= it.host.b[1] + it.host.b[3] * 0.5 else 'b')
             if fill and it.role != 'caption': pad_plate(el)
+            if WIDE and it.role == 'caption':  # подпись теряет плашку — белый текст стал бы невидим
+                for f in el.iter(A + 'srgbClr'):
+                    if f.get('val') == 'FFFFFF' and f.getparent().getparent().tag in (A + 'rPr', A + 'endParaRPr'): f.set('val', '0F1115')
             if fill and is_dark(fill):
                 for rp in el.iter(A + 'rPr', A + 'endParaRPr'):
                     f = rp.find('a:solidFill/a:srgbClr', NS)
@@ -778,6 +879,7 @@ def unstack(items):
             pb = pl.b
             ov = min(b[0] + b[2], pb[0] + pb[2]) - max(b[0], pb[0])
             if ov < 0.5 * min(b[2], pb[2]): continue
+            if WIDE and b[1] + b[3] <= pb[1] + pb[3] + 0.05 * IN: continue  # надпись лежит на плашке целиком
             if pb[1] < b[1] < pb[1] + pb[3] - 0.03 * IN:
                 d = pb[1] + pb[3] + int(0.08 * IN) - b[1]
                 for o in items:
@@ -933,7 +1035,7 @@ def src_items_by_y(src, pred):
         if etree.QName(el).localname != 'sp': continue
         ne = materialize_sp(src, el)
         b = bbox(ne)
-        if b is None or is_offslide(b): continue
+        if b is None or is_offslide(b) or is_footer(b): continue
         if pred(ne, el): res.append((b[1], b[0], ne, el))
     res.sort(key=lambda x: (x[0], x[1]))
     return res
@@ -1113,14 +1215,7 @@ def set_plain(sp, text):
 def build_plan(bld, src):
     s = bld.clone(DONOR['plan'])
     smap = scheme_map(src)
-    # строки таблицы источника
-    rows = []
-    for gf in src._element.iter(P + 'graphicFrame'):
-        for tr in gf.iter(A + 'tr'):
-            cells = tr.findall('a:tc', NS)
-            texts = [text_of(c).strip() for c in cells]
-            if len(texts) >= 2 and texts[1]:
-                rows.append(para_text(cells[1]).replace('\n', ' ').strip())
+    rows = plan_rows(src)
     tbl = s._element.find('.//a:tbl', NS)
     trs = tbl.findall('a:tr', NS)
     tmpl = trs[0]
@@ -1143,10 +1238,15 @@ def build_plan(bld, src):
         h = img_hash(src, pic)
         if h in DECOR_SKIP: continue
         b = bbox(pic)
-        if b and not is_offslide(b) and (spic is None or b[2] * b[3] > spic[1]): spic = (pic, b[2] * b[3])
+        if b and not is_offslide(b) and not is_footer(b) and (spic is None or b[2] * b[3] > spic[1]): spic = (pic, b[2] * b[3])
     dpic = s._element.find('.//p:pic', NS)
     if spic:
         replace_pic_fit(bld, s, dpic, src, spic[0])
+    elif WIDE and dpic is not None:
+        dpic.getparent().remove(dpic)  # картинка донора — из чужого урока
+    if WIDE:
+        title, _ = slide_title_info(src)
+        if title: bld.set_title(s, title)
     return s
 
 
@@ -1348,6 +1448,15 @@ def build_think(bld, src, report):
 
 def build_divider(bld, src, k):
     s = bld.clone(DONOR['dividers'][k % len(DONOR['dividers'])])
+    # описание-заглушка фирменного шаблона: текст из исходника (10×7,5″) или убираем
+    desc = (wide_divider(src) or ('', ''))[1] if WIDE else ''
+    for sp in list(s.shapes._spTree.iter(P + 'sp')):
+        if not text_of(sp).startswith('Добавь описание'): continue
+        if desc: Builder.set_text_runs(sp.find('p:txBody', NS), [[(desc, None)]]); desc = ''
+        else: sp.getparent().remove(sp)
+    if WIDE:
+        bld.set_title(s, (wide_divider(src) or ('', ''))[0])
+        return s
     t = ''
     for el in src.shapes._spTree.iter(P + 'sp'):
         ph = el.find('p:nvSpPr/p:nvPr/p:ph', NS)
@@ -1420,7 +1529,17 @@ def build_summary(bld, src):
         tbl.append(tr)
     gf = s._element.find('.//p:graphicFrame', NS)
     n = len(rows)
-    gf.find('p:xfrm/a:off', NS).set('y', str(int(max(1.9, 2.77 - (n - 3) * 0.45) * IN)))
+    y = max(1.9, 2.77 - (n - 3) * 0.45) * IN
+    if WIDE:  # пунктов много (старый шаблон 10×7,5″) — кегль 14 и таблица выше, чтобы не уйти за низ
+        w = [int(g.get('w')) for g in tbl.iter(A + 'gridCol')][1]
+        height = lambda: sum(max(int(tr.get('h')), estimate_height(tr.findall('a:tc', NS)[1].find('a:txBody', NS), w))
+                             for tr in tbl.findall('a:tr', NS))
+        if y + height() > 6.75 * IN:
+            for tr in tbl.findall('a:tr', NS):
+                for rp in tr.findall('a:tc', NS)[1].iter(A + 'rPr', A + 'endParaRPr'):
+                    if rp.get('sz') == '1600': rp.set('sz', '1400')
+        y = min(y, max(1.3 * IN, 6.75 * IN - height()))
+    gf.find('p:xfrm/a:off', NS).set('y', str(int(y)))
     if title: bld.set_title(s, title)
     return s
 
@@ -1478,7 +1597,8 @@ def build_links(bld, srcs):
     for src in srcs:
         smap = scheme_map(src)
         title, tels = slide_title_info(src)
-        its = src_items_by_y(src, lambda ne, el: el not in tels and len(text_of(ne).strip()) > 3 and 'навигации' not in text_of(ne))
+        its = src_items_by_y(src, lambda ne, el: el not in tels and len(text_of(ne).strip()) > 3 and 'навигации' not in text_of(ne)
+                             and not (WIDE and text_of(ne).strip().lower().startswith(('использованные', 'ссылки на использованные'))))
         its.sort(key=lambda x: (x[1] // int(1.0 * IN), x[0]))  # по колонкам
         for _, _, ne, el in its:
             for para in src_paragraphs(src, el, ne, smap, sz=1200, keep_bold=False):
@@ -1491,7 +1611,11 @@ def build_links(bld, srcs):
             if rp is not None and rp.find('a:hlinkClick', NS) is not None:
                 f = rp.find('a:solidFill', NS); rp.remove(f); rp.set('u', 'sng')
     tsp = get_ph(s, 'title')
-    bld.set_title(s, 'Ссылки на иллюстрации')
+    head = 'Ссылки на иллюстрации'
+    if WIDE:
+        head = next((re.sub(r'\s+', ' ', text_of(el)).strip() for src in srcs for el in src.shapes._spTree.iter(P + 'sp')
+                     if text_of(el).strip().lower().startswith('использованные')), head)
+    bld.set_title(s, head)
     tb_x = tsp.find('p:spPr/a:xfrm', NS)
     tb_x.find('a:ext', NS).set('cx', str(RM - LM)); tb_x.find('a:ext', NS).set('cy', str(int(0.45 * IN)))
     body = get_ph(s, 'body')
@@ -1526,13 +1650,18 @@ def build_links(bld, srcs):
 # ---------------------------------------------------------------- сборка
 def convert(src_path, out_path, lesson_no, overrides=None):
     overrides = overrides or {}
+    global SRC_W, SRC_H, K, WIDE, TITLE_N
     sp = Presentation(src_path)
+    slides = list(sp.slides)
+    if sp.slide_width > 8.5 * IN:  # старый шаблон 10×7,5″: геометрия из файла, титул ищем
+        SRC_W, SRC_H, WIDE = sp.slide_width, sp.slide_height, True
+        K = TW / SRC_W
+        TITLE_N = find_title_slide(slides)
     bld = Builder()
     report = []
     div_k = 0
     section = 0
     kinds = []
-    slides = list(sp.slides)
     allk = [overrides.get(i, {}).get('kind') or classify(src, i) for i, src in enumerate(slides, 1)]
     for i, src in enumerate(slides, 1):
         kind = allk[i - 1]
@@ -1558,6 +1687,7 @@ def convert(src_path, out_path, lesson_no, overrides=None):
             while j < len(slides) and allk[j] == 'links': grp.append(slides[j]); j += 1
             s = build_links(bld, grp)
         elif kind == 'bye': s = bld.clone(DONOR['bye'])
+        elif kind == 'rating': s = bld.clone(DONOR['rating'])  # «Как вы оцениваете урок?» → форма шаблона
         elif kind == 'why': s = build_why(bld, src)
         elif kind == 'think': s = build_think(bld, src, rep)
         else:
@@ -1571,6 +1701,7 @@ def convert(src_path, out_path, lesson_no, overrides=None):
                 rep.append('нет заголовка')
                 t_sp = get_ph(s, 'title')
                 t_sp.getparent().remove(t_sp)
+        if WIDE: rep += wide_notes(src, i, kind)
         if src._element.get('show') == '0' and kind != 'links': s._element.set('show', '0')
         s._kind = kind
         # заметки

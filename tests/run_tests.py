@@ -20,8 +20,8 @@ OUT, BASELINE = ROOT / 'outputs/tests', ROOT / 'tests/baseline'
 
 
 def lesson_of(name):
-    m = re.match(r'(\d)\.(\d+)', name)
-    return '%s.%s' % m.groups() if m else None
+    m = re.search(r'(?:^|\D)(\d{1,2})\.(\d{1,2})(?!\d)', name)
+    return '%s.%s' % (m.group(1), int(m.group(2))) if m else None
 
 
 def fingerprint(pptx):
@@ -74,7 +74,7 @@ def main():
     OUT.mkdir(parents=True, exist_ok=True); BASELINE.mkdir(parents=True, exist_ok=True)
     summary, failed = [], False
     for src in sorted(OLD.glob('*.pptx')):
-        lesson = lesson_of(src.name)
+        lesson = lesson_of(src.name) or P.detect_lesson(src)  # номер из имени файла или с титула
         if not lesson or (a.only and lesson != a.only): continue
         print('\n=== %s — %s' % (lesson, src.name), flush=True)
         out = OUT / lesson

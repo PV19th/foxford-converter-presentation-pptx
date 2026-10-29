@@ -23,10 +23,10 @@
   "grades": {
     "5": {"base": "base/generated/foxford_5-11_v01_26.pptx",
           "donor": {"title": 6, "plan": 151, "wait": 152, "summary": 155, "reflection": 158,
-                    "links": 118, "bye": 126, "dividers": [13, 15, 14, 20], "content": [153, 156, 157, 154]}},
+                    "links": 118, "bye": 126, "rating": 104, "dividers": [13, 15, 14, 20], "content": [153, 156, 157, 154]}},
     "6": {"base": "base/generated/foxford_5-11_v01_26.pptx",
           "donor": {"title": 6, "plan": 160, "wait": 161, "summary": 164, "reflection": 166,
-                    "links": 118, "bye": 126, "dividers": [13, 15, 14, 20], "content": [163, 163, 165, 163],
+                    "links": 118, "bye": 126, "rating": 104, "dividers": [13, 15, 14, 20], "content": [163, 163, 165, 163],
                     "why": 159, "think": 162, "title_strip_callouts": true, "wait_step": 1.34, "wait_center": 4.18}}
   }
 }
