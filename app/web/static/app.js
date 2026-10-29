@@ -60,7 +60,8 @@
     renderChoices();
   }
 
-  // варианты слайдов шаблона (титул, прощание…): строка формы с миниатюрами на каждый
+  // варианты слайдов шаблона (титул, прощание…): строка формы с миниатюрами на каждый.
+  // Необязательный выбор (optional) начинается с плитки «Как в старой»: слайд останется из старой презентации
   function renderChoices() {
     var t = currentTemplate(), rows = $('choice-rows');
     rows.innerHTML = ''; state.choices = {};
@@ -69,6 +70,13 @@
       var lab = el('div', { class: 'row__label mono muted' }, ('0' + (5 + ci)).slice(-2));
       lab.appendChild(el('b', null, c.label));
       var body = el('div'), grid = el('div', { class: 'titles', role: 'radiogroup', 'aria-label': c.label });
+      if (c.optional) {
+        var old = el('button', { type: 'button', class: 'title-opt title-opt--old', role: 'radio', 'data-n': 0,
+                                 'aria-label': c.label + ': как в старой презентации' });
+        old.appendChild(el('i', { class: 'mono' }, 'Как в старой'));
+        old.addEventListener('click', function () { selectChoice(grid, c.key, 0); });
+        grid.appendChild(old);
+      }
       c.slides.forEach(function (n, i) {
         var b = el('button', { type: 'button', class: 'title-opt', role: 'radio', 'data-n': n,
                                'aria-label': c.label + ' ' + (i + 1) });
@@ -80,12 +88,12 @@
       body.appendChild(grid);
       if (c.hint) body.appendChild(el('p', { class: 'hint mono muted' }, c.hint));
       row.appendChild(lab); row.appendChild(body); rows.appendChild(row);
-      selectChoice(grid, c.key, c.default);
+      selectChoice(grid, c.key, c.optional ? 0 : c.default);
     });
   }
 
   function selectChoice(grid, key, n) {
-    state.choices[key] = n;
+    if (n) state.choices[key] = n; else delete state.choices[key];
     grid.querySelectorAll('.title-opt').forEach(function (b) {
       b.setAttribute('aria-checked', String(+b.getAttribute('data-n') === n));
     });
@@ -235,7 +243,9 @@
     if (!items.length) return el('p', { class: 'empty' }, emptyText);
     var ul = el('ul');
     items.forEach(function (it) {
-      var li = el('li'); li.appendChild(slideButton(it.slide)); li.appendChild(document.createTextNode(it.text));
+      var li = el('li');
+      if (it.slide) li.appendChild(slideButton(it.slide));
+      li.appendChild(document.createTextNode(it.slide ? it.text : it.text.charAt(0).toUpperCase() + it.text.slice(1)));
       ul.appendChild(li);
     });
     return ul;

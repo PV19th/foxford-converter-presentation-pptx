@@ -45,7 +45,7 @@ def lesson_page(lesson, d, ref_previews, ref_missing, fp_status):
         ours = '<img src="slides/%s">' % d['previews'][i] if i < len(d['previews']) else ''
         ref = '<img src="reference/slides/%s">' % ref_previews[i] if i < len(ref_previews) else ''
         rows.append('<tr><td class="n">%d</td><td>%s</td><td>%s</td></tr>' % (i + 1, ours, ref))
-    li = lambda xs: ''.join('<li>слайд %d — %s</li>' % (x['slide'], html.escape(x['text'])) for x in xs) or '<li>нет</li>'
+    li = lambda xs: ''.join('<li>слайд %s — %s</li>' % (x['slide'] or '—', html.escape(x['text'])) for x in xs) or '<li>нет</li>'
     return '''<!doctype html><meta charset="utf-8"><title>%(l)s</title>
 <style>body{font:14px/1.5 -apple-system,sans-serif;margin:24px;color:#000}h1{font-size:20px;text-transform:uppercase}
 table{border-collapse:collapse;width:100%%}td,th{border-top:1px solid #000;padding:8px;vertical-align:top;text-align:left}
@@ -101,7 +101,7 @@ def main():
         print('MISSING:', d['missing']); print('EXTRA:', d['extra'])
         if any('заглушка' in c['text'] for c in d['checks']): failed = True
         for s in d['stickers']: print('  стикер: слайд %d — %s' % (s['slide'], s['text']))
-        for c in d['checks']: print('  проверить: слайд %d — %s' % (c['slide'], c['text']))
+        for c in d['checks']: print('  проверить: слайд %s — %s' % (c['slide'] or '—', c['text']))
         summary.append((lesson, fp_status, len(d['missing'])))
     links = ''.join('<li><a href="%s/index.html">%s</a> — отпечаток: %s; MISSING слов: %d</li>' % (l, l, html.escape(s), m)
                     for l, s, m in summary)

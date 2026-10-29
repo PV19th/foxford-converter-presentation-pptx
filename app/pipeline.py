@@ -108,6 +108,18 @@ def set_subject(pptx, subject, slide_no=1):
     p.save(pptx)
 
 
+def slide_words(pptx, numbers):
+    """Слова слайдов с этими номерами — так же, как их считает verify.py."""
+    from collections import Counter
+    from pptx import Presentation
+    c = Counter()
+    for i, s in enumerate(Presentation(pptx).slides, 1):
+        if i in numbers:
+            t = ' '.join(x.text or '' for x in s._element.iter(A_ + 't'))
+            c.update(w for w in (w.lower() for w in re.findall(r'[A-Za-zА-Яа-яЁё0-9]+', t)) if not re.fullmatch(r'\d{1,2}', w))
+    return c
+
+
 def find_stubs(pptx, phrases):
     """Тексты-заглушки шаблона («Тема урока», «Текст»…), попавшие в результат: [{'slide', 'text'}]."""
     from pptx import Presentation
@@ -280,10 +292,23 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     progress('verify')
     missing, extra = parse_verify(run([sys.executable, 'verify.py', str(source), str(result)], 'сверка текста',
                                       cwd=CONVERTER))
+    # слайды, заменённые по выбору пользователя слайдами шаблона, — не расхождения: убираем их слова из сверки
+    replaced = [r for r in slides if r['kind'] in (choices or {}) and profile.get('choices', {}).get(r['kind'], {}).get('optional')]
+    if replaced:
+        from collections import Counter
+        missing = dict(Counter(missing) - slide_words(source, {r['src'] for r in replaced}))
+        extra = dict(Counter(extra) - slide_words(result, {r['slide'] for r in replaced}))
     progress('render')
     previews = render(result, outdir)
     stickers, checks = manual_notes(slides)
-    checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', [])), key=lambda c: c['slide'])
+    # необязательный выбор (мотивашка, рефлексия, оценка урока) заменяет слайд старой презентации — если он там есть
+    kinds = {r['kind'] for r in slides}
+    for key in choices or {}:
+        c = profile.get('choices', {}).get(key, {})
+        if c.get('optional') and key not in kinds:
+            checks.append({'slide': None, 'text': 'выбранный слайд «%s» не поставлен: в старой презентации нет такого слайда'
+                                                  % c['label']})
+    checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', [])), key=lambda c: c['slide'] or 0)
     data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'choices': choices or {}, 'subject': subject,
             'slides': slides, 'previews': previews, 'missing': missing, 'extra': extra,
             'stickers': stickers, 'checks': checks,
@@ -314,7 +339,7 @@ def main():
     print('слайдов:', len(d['previews']), '| размер МБ:', d['size_mb'])
     print('MISSING:', d['missing']); print('EXTRA:', d['extra'])
     for s in d['stickers']: print('стикер: слайд %d — %s' % (s['slide'], s['text']))
-    for c in d['checks']: print('проверить: слайд %d — %s' % (c['slide'], c['text']))
+    for c in d['checks']: print('проверить: слайд %s — %s' % (c['slide'] or '—', c['text']))
 
 
 if __name__ == '__main__':

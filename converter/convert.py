@@ -77,6 +77,8 @@ def classify(s, i):
         if h: hs.add(h)
     t = all_text(s)
     if i == TITLE_N: return 'title'
+    k = classify_service(s, title, t)
+    if k: return k
     if WIDE:
         k = classify_wide(s, title, t)
         if k: return k
@@ -121,10 +123,40 @@ def is_footer(b):
     return WIDE and b is not None and b[1] >= int(6.5 * IN)
 
 
+# Служебные слайды, которые пользователь может заменить слайдом шаблона (выбор на сайте: ключи CONV_DONOR).
+# Не выбрано — слайд переносится из старой презентации как обычный.
+SERVICE = [('lesson_end', r'как прош[её]л урок|как прошло занятие|что было самым сложным|настроение после урока|how was the lesson'),
+           ('homework', r'как дела с домашн|how is your homework'),
+           ('mood', r'настроение (сегодня|перед)|^как (твоё |твое )?настроение|how are you'),
+           ('rating', r'как вы оцениваете урок|как вам урок|как тебе урок|help us improve')]
+SERVICE_KINDS = [k for k, _ in SERVICE] + ['motivation']
+
+
+def classify_service(s, title, t):
+    for kind, rx in SERVICE:
+        # у «Как вы оцениваете урок?» крупная надпись не в шапке слайда — ищем по всему тексту
+        where = re.sub(r'\s+', ' ', t if kind == 'rating' else title).strip().lower()
+        if DONOR.get(kind) and re.search(rx, where): return kind
+    if WIDE and DONOR.get('motivation') and is_motivation(s, title): return 'motivation'
+    return None
+
+
+def is_motivation(s, title):
+    """Мотивашка старого шаблона 10×7,5″: лозунг без заголовка вверху («Practice makes perfect!», «Ошибки — это часть
+    процесса…»): одна-две надписи, крупная (или любая, если крупной нет) кончается «!»; не перерыв и не прощание."""
+    if title: return False
+    items = src_items_by_y(s, lambda ne, el: text_of(ne).strip() and 'навигаци' not in text_of(ne).lower())
+    texts = [re.sub(r'\s+', ' ', text_of(x[2])).strip() for x in items]
+    if not texts or len(texts) > 2 or sum(map(len, texts)) > 200: return False
+    if any(x[3].find('.//a:hlinkClick', NS) is not None for x in items): return False
+    head = get_ph(s, 'ctrTitle')
+    heads = [re.sub(r'\s+', ' ', text_of(head)).strip()] if head is not None and text_of(head).strip() else texts
+    return any(h.endswith('!') for h in heads) and not re.search(r'break|перемен|разминк|увидимся|до встречи|bye', ' '.join(texts).lower())
+
+
 def classify_wide(s, title, t):
     tu = t.upper()
     if re.search(r'УВИДИМСЯ|ДО ВСТРЕЧИ|ДО СВИДАНИЯ|BYE FOR NOW', tu): return 'bye'
-    if DONOR.get('rating') and re.search(r'КАК ВЫ ОЦЕНИВАЕТЕ УРОК|КАК ВАМ УРОК', tu): return 'rating'
     if any(text_of(el).strip().lower().startswith(('использованные источники', 'использованные ресурсы'))
            for el in s.shapes._spTree.iter(P + 'sp')): return 'links'
     tl = title.lower()
@@ -496,6 +528,7 @@ def transfer_content(bld, src, dst, report):
             if h in DECOR_VAZHNO: badges.append(list(b)); continue
             if h in DECOR_Q: qmarks.append(list(b)); continue
             if is_flat(src, el): continue  # одноцветная заглушка-маска
+            if WIDE and b[1] <= 0.1 * IN and b[2] >= 0.95 * SRC_W and b[3] <= 2 * IN: continue  # полоса-шапка старого шаблона (9.23 сл. 1)
             ne = copy.deepcopy(el)
             items.append(Item(ne, 'pic')); items[-1].blank_bottom = blank_bottom_frac(src, el)
         elif tag == 'cxnSp':
@@ -618,6 +651,7 @@ def transfer_content(bld, src, dst, report):
             it.grid = [int(g.get('w')) for g in el.iter(A + 'gridCol')]
             it.rows = [int(tr.get('h')) for tr in el.iter(A + 'tr')]
         renumber(el)
+    if WIDE: lift_tabs(items)
     # верх контента считаем только по перенесённым элементам (пустые белые плашки и декор не в счёт)
     tops2 = [it.sb[1] for it in items] + [bb[1] for bb in badges + qmarks]
     if tops2: sy0 = min([int(0.75 * IN)] + tops2)
@@ -636,10 +670,11 @@ def transfer_content(bld, src, dst, report):
                         if rp.get('sz') == '1600': rp.set('sz', '1400')
                     for bs_ in it.el.iter(A + 'buSzPts'): pass
         for it in items:
-            if it.kind == 'cxn': set_bbox(it.el, transform_box(it.sb, sy0, k, clamp=False))
+            if WIDE: set_bbox(it.el, wide_box(it, sy0, k))
+            elif it.kind == 'cxn': set_bbox(it.el, transform_box(it.sb, sy0, k, clamp=False))
             else: set_bbox(it.el, transform_box(it.sb, sy0, k))
             if it.kind == 'tbl':
-                for g, w in zip(it.el.iter(A + 'gridCol'), it.grid): g.set('w', str(int(w * k)))
+                for g, w in zip(it.el.iter(A + 'gridCol'), it.grid): g.set('w', str(int(w * (1 if WIDE else k))))
                 for tr, h in zip(it.el.iter(A + 'tr'), it.rows): tr.set('h', str(int(h * k)))
         snap_captions(items)
         declip(items)
@@ -720,6 +755,32 @@ def transfer_content(bld, src, dst, report):
     if bot > TH - 0.3 * IN:
         report.append('низ контента %.2f″' % (bot / IN))
     return title
+
+
+def wide_box(it, sy0, k):
+    """Старый шаблон 10×7,5″ (масштаб 1:1): уменьшение k — только по высоте; текст, плашки, линии и таблицы
+    сохраняют ширину и левое поле (правки методиста, 9.23 сл. 5, 27), картинки и группы уменьшаются целиком
+    вокруг своего центра."""
+    x, y, w, h = it.sb
+    ny, nh = CT + (y - sy0) * k, h * k
+    if it.kind in ('pic', 'grp'):
+        nw = w * k; x += (w - nw) / 2; w = nw
+    if it.kind != 'cxn':
+        if w > RM - LM: x, w = LM, RM - LM
+        x = min(max(x, LM), RM - w)
+    return [x, ny, w, nh]
+
+
+def lift_tabs(items):
+    """Старый шаблон 10×7,5″: ярлык-вкладка («вы узнаете») наезжает на верх большой плашки — ставим его
+    на плашку сверху, вплотную (правка методиста, 9.23 сл. 7)."""
+    plates = [it for it in items if it.kind == 'sp' and it.el.find('p:spPr/a:solidFill', NS) is not None]
+    for t in plates:
+        for p in plates:
+            tb, pb = t.sb, p.sb
+            if t is not p and tb[3] < 0.6 * IN and tb[2] < 0.7 * pb[2] and pb[3] > 2 * tb[3] \
+                    and tb[1] < pb[1] < tb[1] + tb[3] and pb[0] - 0.1 * IN <= tb[0] <= pb[0] + pb[2]:
+                tb[1] = pb[1] - tb[3]
 
 
 def blank_bottom_frac(src, pic):
@@ -1530,15 +1591,21 @@ def build_summary(bld, src):
     gf = s._element.find('.//p:graphicFrame', NS)
     n = len(rows)
     y = max(1.9, 2.77 - (n - 3) * 0.45) * IN
-    if WIDE:  # пунктов много (старый шаблон 10×7,5″) — кегль 14 и таблица выше, чтобы не уйти за низ
+    if WIDE:  # старый шаблон 10×7,5″ (правка методиста, 9.23 сл. 31): таблица под картинкой донора, строки сжаты по месту
+        y = max(y, 2.1 * IN)
+        trs = tbl.findall('a:tr', NS)
         w = [int(g.get('w')) for g in tbl.iter(A + 'gridCol')][1]
-        height = lambda: sum(max(int(tr.get('h')), estimate_height(tr.findall('a:tc', NS)[1].find('a:txBody', NS), w))
-                             for tr in tbl.findall('a:tr', NS))
-        if y + height() > 6.75 * IN:
-            for tr in tbl.findall('a:tr', NS):
+        need = lambda tr: estimate_height(tr.findall('a:tc', NS)[1].find('a:txBody', NS), w) + int(0.15 * IN)
+        if sum(map(need, trs)) > 6.75 * IN - y:  # не влезает — кегль 14
+            for tr in trs:
                 for rp in tr.findall('a:tc', NS)[1].iter(A + 'rPr', A + 'endParaRPr'):
                     if rp.get('sz') == '1600': rp.set('sz', '1400')
-        y = min(y, max(1.3 * IN, 6.75 * IN - height()))
+        hs = [need(tr) for tr in trs]
+        y = min(y, max(1.3 * IN, 6.75 * IN - sum(hs)))
+        extra = max(0, 6.75 * IN - y - sum(hs)) / len(trs)
+        for tr, h in zip(trs, hs): tr.set('h', str(int(max(h, min(int(tr.get('h')), h + extra)))))
+        ext = gf.find('p:xfrm/a:ext', NS)
+        ext.set('cx', str(sum(int(g.get('w')) for g in tbl.iter(A + 'gridCol')))); ext.set('cy', str(sum(int(tr.get('h')) for tr in trs)))
     gf.find('p:xfrm/a:off', NS).set('y', str(int(y)))
     if title: bld.set_title(s, title)
     return s
@@ -1687,7 +1754,7 @@ def convert(src_path, out_path, lesson_no, overrides=None):
             while j < len(slides) and allk[j] == 'links': grp.append(slides[j]); j += 1
             s = build_links(bld, grp)
         elif kind == 'bye': s = bld.clone(DONOR['bye'])
-        elif kind == 'rating': s = bld.clone(DONOR['rating'])  # «Как вы оцениваете урок?» → форма шаблона
+        elif kind in SERVICE_KINDS: s = bld.clone(DONOR[kind])  # выбранный на сайте слайд шаблона
         elif kind == 'why': s = build_why(bld, src)
         elif kind == 'think': s = build_think(bld, src, rep)
         else:

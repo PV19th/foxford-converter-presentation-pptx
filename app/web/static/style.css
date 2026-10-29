@@ -85,6 +85,8 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .title-opt[aria-checked="true"] { border-color: var(--ink); outline: 2px solid var(--accent); outline-offset: 2px; }
 .title-opt:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .title-opt span { position: absolute; left: 0; bottom: 0; padding: 1px 6px; background: var(--bg); }
+.title-opt--old i { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; padding: 8px;
+                    font-style: normal; text-align: center; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding-top: 28px; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 10px; min-height: 48px; padding: 0 28px;
