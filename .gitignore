@@ -13,3 +13,6 @@ test_inputs/*/*
 outputs/
 data/
 tmp/
+
+# база, собранная tools/build_base.py из шаблона
+base/generated/

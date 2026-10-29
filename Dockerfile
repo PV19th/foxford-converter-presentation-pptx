@@ -29,7 +29,11 @@ WORKDIR /srv
 COPY base/ base/
 COPY templates/ templates/
 COPY converter/ converter/
+COPY tools/ tools/
 COPY app/ app/
+
+# базы профилей на фирменном шаблоне собираются скриптом (base/generated/)
+RUN python3 tools/build_base.py
 
 # конвертер ищет assets/ со стикерами в CONV_DIR
 ENV CONV_DIR=/srv

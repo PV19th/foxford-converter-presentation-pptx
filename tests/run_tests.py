@@ -64,8 +64,13 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument('--save-baseline', action='store_true')
     ap.add_argument('--only', help='только этот урок, например 5.21')
+    ap.add_argument('--template', default=P.DEFAULT_TEMPLATE, help='профиль шаблона из templates/')
+    ap.add_argument('--title', type=int, help='номер титульного слайда шаблона')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
+    global OUT, BASELINE
+    if a.template != P.DEFAULT_TEMPLATE:  # у каждого профиля свои результаты и эталоны
+        OUT, BASELINE = OUT / a.template, BASELINE / a.template
     OUT.mkdir(parents=True, exist_ok=True); BASELINE.mkdir(parents=True, exist_ok=True)
     summary, failed = [], False
     for src in sorted(OLD.glob('*.pptx')):
@@ -74,7 +79,7 @@ def main():
         print('\n=== %s — %s' % (lesson, src.name), flush=True)
         out = OUT / lesson
         try:
-            d = P.process(src, out, lesson)
+            d = P.process(src, out, lesson, a.template, title=a.title)
         except P.ConversionError as e:
             print('ОШИБКА:', e); failed = True; summary.append((lesson, 'ОШИБКА: %s' % e, 0)); continue
         fp = fingerprint(out / 'converted.pptx')
@@ -94,6 +99,7 @@ def main():
         (out / 'index.html').write_text(lesson_page(lesson, d, ref_previews, ref_missing, fp_status), 'utf8')
         print('слайдов: %d (эталон: %d) | отпечаток: %s' % (len(d['previews']), len(ref_previews), fp_status))
         print('MISSING:', d['missing']); print('EXTRA:', d['extra'])
+        if any('заглушка' in c['text'] for c in d['checks']): failed = True
         for s in d['stickers']: print('  стикер: слайд %d — %s' % (s['slide'], s['text']))
         for c in d['checks']: print('  проверить: слайд %d — %s' % (c['slide'], c['text']))
         summary.append((lesson, fp_status, len(d['missing'])))

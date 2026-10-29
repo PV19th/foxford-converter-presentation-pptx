@@ -1,0 +1,27 @@
+{
+  "name": "Фирменный шаблон 5–11",
+  "order": 2,
+  "engine": "rules",
+  "base_recipe": {
+    "template": "base/template_4x3_v01_26.pptx",
+    "output": "base/generated/foxford_5-11_v01_26.pptx",
+    "titles": [5, 6, 7, 8, 9, 10, 11],
+    "dividers": [13, 14, 15, 20],
+    "append": [["base/ex58.pptx", [2, 4, 6, 8, 10, 22, 26, 31]],
+               ["base/ex64.pptx", [2, 3, 5, 6, 7, 16, 26, 29]]]
+  },
+  "titles": [5, 6, 7, 8, 9, 10, 11],
+  "default_title": 6,
+  "stub_phrases": ["Тема урока", "в пару строк", "в несколько строк", "Описание темы", "Напиши название",
+                   "Добавь описание", "Заголовок слайда", "Текст", "У короля с королевой", "Органы чувств хорошо развиты",
+                   "Реплика диалога", "Небольшой текст", "Модуль 1", "foxford.ru/wiki"],
+  "grades": {
+    "5": {"base": "base/generated/foxford_5-11_v01_26.pptx",
+          "donor": {"title": 6, "plan": 151, "wait": 152, "summary": 155, "reflection": 158,
+                    "links": 118, "bye": 126, "dividers": [13, 15, 14, 20], "content": [153, 156, 157, 154]}},
+    "6": {"base": "base/generated/foxford_5-11_v01_26.pptx",
+          "donor": {"title": 6, "plan": 160, "wait": 161, "summary": 164, "reflection": 166,
+                    "links": 118, "bye": 126, "dividers": [13, 15, 14, 20], "content": [163, 163, 165, 163],
+                    "why": 159, "think": 162, "title_strip_callouts": true, "wait_step": 1.34, "wait_center": 4.18}}
+  }
+}
