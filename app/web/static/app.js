@@ -270,7 +270,11 @@
     r.checks.forEach(function (c) { (notesBySlide[c.slide] = notesBySlide[c.slide] || []).push(c.text); });
 
     $('r-stickers').replaceChildren(noteList(r.stickers, 'Стикеры добавлять не нужно.'));
-    $('r-checks').replaceChildren(noteList(r.checks, 'Конвертер ничего не отметил.'));
+    // замечания к конкретным слайдам — под их превью; здесь — только общие
+    var general = r.checks.filter(function (c) { return !c.slide; }), box = $('r-checks');
+    box.replaceChildren(general.length ? noteList(general) : '');
+    if (general.length < r.checks.length) box.appendChild(el('p', { class: 'empty' }, 'Замечания к слайдам — под их превью ниже.'));
+    else if (!general.length) box.appendChild(el('p', { class: 'empty' }, 'Конвертер ничего не отметил.'));
 
     var words = Object.keys(r.missing), box = $('r-words');
     box.innerHTML = '';
@@ -295,6 +299,7 @@
     $('r-count').textContent = slides.length + ' шт.';
     var grid = $('r-grid'); grid.innerHTML = '';
     slides.forEach(function (name, i) {
+      var cell = el('div');
       var b = el('button', { type: 'button', class: 'thumb', 'aria-label': 'Слайд ' + (i + 1) });
       b.appendChild(el('img', { src: '/api/jobs/' + j.id + '/thumbs/' + name, alt: '', loading: 'lazy' }));
       var cap = el('span', { class: 'thumb__cap mono' });
@@ -303,7 +308,13 @@
       if (n) cap.appendChild(el('span', { class: 'flag', title: n.join('\n') }, n.some(function (t) { return /^Стикер/.test(t); }) ? 'стикер' : 'проверить'));
       b.appendChild(cap);
       b.addEventListener('click', function () { openViewer(i); });
-      grid.appendChild(b);
+      cell.appendChild(b);
+      if (n) {
+        var ul = el('ul', { class: 'thumb__notes' });
+        n.forEach(function (t) { ul.appendChild(el('li', null, t.charAt(0).toUpperCase() + t.slice(1))); });
+        cell.appendChild(ul);
+      }
+      grid.appendChild(cell);
     });
   }
 

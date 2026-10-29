@@ -108,7 +108,8 @@ def meta():
              'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()],
              'ratio': v.get('ratio', '4 / 3'),
              'thumbs_v': version(sorted((pipeline.TEMPLATES / k / 'thumbs').glob('*.jpg')))}
-            for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))]
+            for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))
+            if not v.get('hidden')]  # "hidden": профиль только для тестов, на сайте его нет
     return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS, 'subjects': texts.SUBJECTS,
             'contact': config.SUPPORT_CONTACT, 'max_upload_mb': config.MAX_UPLOAD_MB,
             'ttl_hours': config.JOB_TTL_HOURS}
@@ -127,7 +128,7 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
     if not pipeline.LESSON_RE.match(lesson):
         return _bad('Номер урока нужно писать так: класс.урок, например 5.21.')
     tpl = pipeline.load_templates().get(template)
-    if tpl is None: return _bad('Такого шаблона нет.')
+    if tpl is None or tpl.get('hidden'): return _bad('Такого шаблона нет.')
     if pipeline.grade_settings(tpl, lesson.split('.')[0]) is None:
         return _bad('Шаблон «%s» пока не поддерживает этот класс.' % tpl['name'])
     try:
