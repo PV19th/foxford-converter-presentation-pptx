@@ -65,7 +65,7 @@ def main():
     ap.add_argument('--save-baseline', action='store_true')
     ap.add_argument('--only', help='только этот урок, например 5.21')
     ap.add_argument('--template', default=P.DEFAULT_TEMPLATE, help='профиль шаблона из templates/')
-    ap.add_argument('--title', type=int, help='номер титульного слайда шаблона')
+    ap.add_argument('--choice', action='append', default=[], metavar='КЛЮЧ=НОМЕР', help='вариант слайда, например bye=128')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     global OUT, BASELINE
@@ -79,7 +79,7 @@ def main():
         print('\n=== %s — %s' % (lesson, src.name), flush=True)
         out = OUT / lesson
         try:
-            d = P.process(src, out, lesson, a.template, title=a.title)
+            d = P.process(src, out, lesson, a.template, choices=P.parse_choices(a.choice))
         except P.ConversionError as e:
             print('ОШИБКА:', e); failed = True; summary.append((lesson, 'ОШИБКА: %s' % e, 0)); continue
         fp = fingerprint(out / 'converted.pptx')

@@ -20,11 +20,11 @@ def _save(job):
     (_dir(job['id']) / 'job.json').write_text(json.dumps(job, ensure_ascii=False), 'utf8')
 
 
-def create(filename, template, lesson, title=None):
+def create(filename, template, lesson, choices=None):
     """Новая задача; файл презентации вызывающий кладёт в source_path(id) и затем вызывает submit."""
     jid = uuid.uuid4().hex
     _dir(jid).mkdir(parents=True)
-    job = {'id': jid, 'filename': filename, 'template': template, 'lesson': lesson, 'title': title,
+    job = {'id': jid, 'filename': filename, 'template': template, 'lesson': lesson, 'choices': choices or {},
            'status': 'queued', 'step': None, 'error': None, 'created': time.time()}
     _save(job)
     return job
@@ -41,7 +41,7 @@ def submit(job):
         _jobs[job['id']] = job
         _pending.append(job['id'])
     _queue.put(job['id'])
-    log.info('задача %s: в очереди (%s, %s, %s, титул %s)', job['id'], job['filename'], job['template'], job['lesson'], job['title'])
+    log.info('задача %s: в очереди (%s, %s, %s, %s)', job['id'], job['filename'], job['template'], job['lesson'], job['choices'])
 
 
 def discard(jid): shutil.rmtree(_dir(jid), ignore_errors=True)
@@ -74,7 +74,7 @@ def _worker():
         def progress(step):
             job['step'] = step; _save(job)
         try:
-            pipeline.process(source_path(jid), _dir(jid), job['lesson'], job['template'], progress, job.get('title'))
+            pipeline.process(source_path(jid), _dir(jid), job['lesson'], job['template'], progress, job.get('choices'))
             job.update(status='done', step=None)
             for name in ('source.pptx', 'converted.pptx'): (_dir(jid) / name).unlink(missing_ok=True)
         except pipeline.ConversionError as e:

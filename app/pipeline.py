@@ -32,12 +32,12 @@ def load_templates():
     return out
 
 
-def converter_env(profile, grade, title=None):
+def converter_env(profile, grade, choices=None):
     g = profile['grades'][grade]
     env = dict(os.environ, CONV_DIR=str(ROOT), CONV_BASE=str(ROOT / g['base']))
     env.pop('CONV_DONOR', None)
     donor = dict(g.get('donor', {}))
-    if title is not None: donor['title'] = title
+    donor.update(choices or {})  # выбор пользователя: {'title': 9, 'bye': 128}
     if donor: env['CONV_DONOR'] = json.dumps(donor)
     return env
 
@@ -179,9 +179,19 @@ def check_input(path):
         raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
 
 
-def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step: None, title=None):
+def check_choices(profile, choices):
+    """Выбор слайдов пользователем ({'title': 9}) должен быть из вариантов профиля."""
+    allowed = profile.get('choices', {})
+    for key, n in (choices or {}).items():
+        if key not in allowed or n not in allowed[key]['slides']:
+            raise ConversionError('У шаблона «%s» нет такого варианта слайда.' % profile['name'])
+
+
+def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step: None, choices=None):
     """Обрабатывает одну презентацию. В outdir появятся result.pptx, result.json, slides/, thumbs/, contact.jpg."""
-    outdir = Path(outdir); outdir.mkdir(parents=True, exist_ok=True)
+    # абсолютные пути: шаги конвертера работают из папки converter/
+    src, outdir = Path(src).resolve(), Path(outdir).resolve()
+    outdir.mkdir(parents=True, exist_ok=True)
     if not LESSON_RE.match(lesson):
         raise ConversionError('Номер урока нужно писать так: класс.урок, например 5.21 или 6.18.')
     templates = load_templates()
@@ -190,8 +200,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     grade = lesson.split('.')[0]
     if grade not in profile['grades']:
         raise ConversionError('Шаблон «%s» пока не поддерживает %s класс.' % (profile['name'], grade))
-    if title is not None and title not in profile.get('titles', []):
-        raise ConversionError('У шаблона «%s» нет такого титульного слайда.' % profile['name'])
+    check_choices(profile, choices)
     check_input(src)
     source = outdir / 'source.pptx'
     if Path(src).resolve() != source.resolve(): shutil.copyfile(src, source)
@@ -200,7 +209,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     progress('convert')
     ensure_base(template)
     out = run([sys.executable, 'convert.py', str(source), str(raw), lesson], 'конвертация',
-              cwd=CONVERTER, env=converter_env(profile, grade, title))
+              cwd=CONVERTER, env=converter_env(profile, grade, choices))
     slides = parse_report(out)
     progress('shrink')
     run([sys.executable, 'shrink.py', str(raw), str(result), SIZE_LIMIT_MB], 'сжатие', cwd=CONVERTER)
@@ -211,7 +220,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     previews = render(result, outdir)
     stickers, checks = manual_notes(slides)
     checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', [])), key=lambda c: c['slide'])
-    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'title': title,
+    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'choices': choices or {},
             'slides': slides, 'previews': previews, 'missing': missing, 'extra': extra,
             'stickers': stickers, 'checks': checks,
             'size_mb': round(result.stat().st_size / 1e6, 1)}
@@ -219,15 +228,22 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     return data
 
 
+def parse_choices(items):
+    """['title=9', 'bye=128'] → {'title': 9, 'bye': 128}"""
+    return {k: int(v) for k, v in (i.split('=', 1) for i in items)}
+
+
 def main():
     ap = argparse.ArgumentParser(description='Перенос старой презентации в новый шаблон')
     ap.add_argument('src'); ap.add_argument('outdir'); ap.add_argument('lesson', help='класс.урок, например 5.21')
     ap.add_argument('--template', default=DEFAULT_TEMPLATE)
-    ap.add_argument('--title', type=int, help='номер титульного слайда шаблона (если шаблон даёт выбор)')
+    ap.add_argument('--choice', action='append', default=[], metavar='КЛЮЧ=НОМЕР',
+                    help='вариант слайда шаблона, например title=9 или bye=128')
     a = ap.parse_args()
     logging.basicConfig(level=logging.INFO, format='%(asctime)s %(levelname)s %(message)s')
     try:
-        d = process(a.src, a.outdir, a.lesson, a.template, progress=lambda s: log.info('шаг: %s', s), title=a.title)
+        d = process(a.src, a.outdir, a.lesson, a.template, progress=lambda s: log.info('шаг: %s', s),
+                    choices=parse_choices(a.choice))
     except ConversionError as e:
         print('ОШИБКА:', e, file=sys.stderr); sys.exit(1)
     print('слайдов:', len(d['previews']), '| размер МБ:', d['size_mb'])

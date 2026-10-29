@@ -3,7 +3,7 @@
 
 Запуск: uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1
 (только один процесс — очередь живёт в памяти)."""
-import hashlib, hmac, logging, re, time, unicodedata
+import hashlib, hmac, json, logging, re, time, unicodedata
 from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -90,7 +90,7 @@ def index(): return FileResponse(WEB / 'index.html')
 @app.get('/api/meta')
 def meta():
     tpls = [{'id': k, 'name': v['name'], 'grades': sorted(v['grades']),
-             'titles': v.get('titles', []), 'default_title': v.get('default_title')}
+             'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()]}
             for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))]
     return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS,
             'contact': config.SUPPORT_CONTACT, 'max_upload_mb': config.MAX_UPLOAD_MB,
@@ -102,7 +102,7 @@ def _bad(msg): return JSONResponse({'error': msg}, 400)
 
 @app.post('/api/jobs')
 async def create_job(file: UploadFile = File(...), template: str = Form(...), lesson: str = Form(...),
-                     title: int | None = Form(None)):
+                     choices: str = Form('{}')):
     # macOS присылает «й» двумя символами — приводим, чтобы имя скачанного файла было обычным
     name = unicodedata.normalize('NFC', Path(file.filename or 'presentation.pptx').name)
     if not name.lower().endswith('.pptx'):
@@ -113,8 +113,12 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
     if tpl is None: return _bad('Такого шаблона нет.')
     if lesson.split('.')[0] not in tpl['grades']:
         return _bad('Шаблон «%s» пока не поддерживает этот класс.' % tpl['name'])
-    if title is not None and title not in tpl.get('titles', []): return _bad('Такого титульного слайда нет.')
-    job = jobs.create(name, template, lesson, title)
+    try:
+        choices = {str(k): int(v) for k, v in json.loads(choices).items()}
+        pipeline.check_choices(tpl, choices)
+    except (ValueError, AttributeError, pipeline.ConversionError):
+        return _bad('Такого варианта слайда нет. Обновите страницу.')
+    job = jobs.create(name, template, lesson, choices)
     limit, size = config.MAX_UPLOAD_MB * 1024 * 1024, 0
     with open(jobs.source_path(job['id']), 'wb') as f:
         while chunk := await file.read(1024 * 1024):
@@ -131,9 +135,9 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
     return {'id': job['id']}
 
 
-@app.get('/api/templates/{tid}/titles/{n}.jpg')
-def title_thumb(tid: str, n: int):
-    p = pipeline.TEMPLATES / tid / 'titles' / ('%d.jpg' % n)
+@app.get('/api/templates/{tid}/thumbs/{n}.jpg')
+def template_thumb(tid: str, n: int):
+    p = pipeline.TEMPLATES / tid / 'thumbs' / ('%d.jpg' % n)
     if tid not in pipeline.load_templates() or not p.exists(): return JSONResponse({'error': 'Нет такой картинки.'}, 404)
     return FileResponse(p, media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=86400'})
 

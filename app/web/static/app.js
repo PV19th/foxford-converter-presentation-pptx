@@ -3,7 +3,7 @@
   'use strict';
   var $ = function (id) { return document.getElementById(id); };
   var meta = null;          // шаблоны, шаги, тексты памятки — с сервера
-  var state = { template: null, grade: null, file: null, title: null };
+  var state = { template: null, grade: null, file: null, choices: {} };
   var job = null;           // последнее состояние задачи
   var pollTimer = null;
   var slides = [];          // имена картинок слайдов результата
@@ -57,28 +57,36 @@
       box.appendChild(b);
     });
     selectGrade(grades.indexOf(state.grade) >= 0 ? state.grade : grades[0]);
-    renderTitles();
+    renderChoices();
   }
 
-  // шаблоны с выбором титула: сетка миниатюр
-  function renderTitles() {
-    var t = currentTemplate(), box = $('titles');
-    box.innerHTML = '';
-    $('title-row').hidden = !t.titles.length;
-    state.title = t.titles.length ? t.default_title : null;
-    t.titles.forEach(function (n, i) {
-      var b = el('button', { type: 'button', class: 'title-opt', role: 'radio', 'data-n': n, 'aria-label': 'Титул ' + (i + 1) });
-      b.appendChild(el('img', { src: '/api/templates/' + t.id + '/titles/' + n + '.jpg', alt: '' }));
-      b.appendChild(el('span', { class: 'mono' }, ('0' + (i + 1)).slice(-2)));
-      b.addEventListener('click', function () { selectTitle(n); });
-      box.appendChild(b);
+  // варианты слайдов шаблона (титул, прощание…): строка формы с миниатюрами на каждый
+  function renderChoices() {
+    var t = currentTemplate(), rows = $('choice-rows');
+    rows.innerHTML = ''; state.choices = {};
+    t.choices.forEach(function (c, ci) {
+      var row = el('div', { class: 'row' });
+      var lab = el('div', { class: 'row__label mono muted' }, ('0' + (4 + ci)).slice(-2));
+      lab.appendChild(el('b', null, c.label));
+      var body = el('div'), grid = el('div', { class: 'titles', role: 'radiogroup', 'aria-label': c.label });
+      c.slides.forEach(function (n, i) {
+        var b = el('button', { type: 'button', class: 'title-opt', role: 'radio', 'data-n': n,
+                               'aria-label': c.label + ' ' + (i + 1) });
+        b.appendChild(el('img', { src: '/api/templates/' + t.id + '/thumbs/' + n + '.jpg', alt: '' }));
+        b.appendChild(el('span', { class: 'mono' }, ('0' + (i + 1)).slice(-2)));
+        b.addEventListener('click', function () { selectChoice(grid, c.key, n); });
+        grid.appendChild(b);
+      });
+      body.appendChild(grid);
+      if (c.hint) body.appendChild(el('p', { class: 'hint mono muted' }, c.hint));
+      row.appendChild(lab); row.appendChild(body); rows.appendChild(row);
+      selectChoice(grid, c.key, c.default);
     });
-    if (state.title != null) selectTitle(state.title);
   }
 
-  function selectTitle(n) {
-    state.title = n;
-    document.querySelectorAll('#titles .title-opt').forEach(function (b) {
+  function selectChoice(grid, key, n) {
+    state.choices[key] = n;
+    grid.querySelectorAll('.title-opt').forEach(function (b) {
       b.setAttribute('aria-checked', String(+b.getAttribute('data-n') === n));
     });
   }
@@ -134,7 +142,7 @@
     var lesson = state.grade + '.' + (+n);
     var fd = new FormData();
     fd.append('file', state.file); fd.append('template', state.template); fd.append('lesson', lesson);
-    if (state.title != null) fd.append('title', state.title);
+    fd.append('choices', JSON.stringify(state.choices));
 
     showProgress({ filename: state.file.name, lesson: lesson, status: 'upload' });
     var xhr = new XMLHttpRequest();
