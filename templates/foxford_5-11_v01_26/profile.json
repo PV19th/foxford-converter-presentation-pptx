@@ -1,6 +1,6 @@
 {
   "name": "Фирменный шаблон 5–11",
-  "order": 2,
+  "order": 1,
   "engine": "rules",
   "base_recipe": {
     "template": "base/template_4x3_v01_26.pptx",

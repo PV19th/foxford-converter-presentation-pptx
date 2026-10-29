@@ -1,6 +1,6 @@
 {
   "name": "Сегмент 5–11 (как в 5.8 и 6.4)",
-  "order": 1,
+  "order": 2,
   "engine": "rules",
   "grades": {
     "5": {"base": "base/ex58.pptx"},
