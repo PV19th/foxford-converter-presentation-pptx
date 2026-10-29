@@ -7,14 +7,17 @@
 """
 import argparse, ast, json, logging, os, re, shutil, subprocess, sys, tempfile, zipfile
 from pathlib import Path
-from PIL import Image
+from PIL import Image, ImageFont
 
 ROOT = Path(__file__).resolve().parent.parent
 CONVERTER = ROOT / 'converter'
 TEMPLATES = ROOT / 'templates'
 LESSON_RE = re.compile(r'^(5|6|7|8|9|10|11)\.\d{1,2}$')
-SIZE_LIMIT_MB = '18.5'
+# shrink.py сжимает картинки, только если файл больше этого. 18,5 МБ было ограничением старой среды
+# (конвертер запускали в чате Claude, крупнее файл не сохранялся); сайту оно не нужно — решение автора
+SIZE_LIMIT_MB = '50'
 DEFAULT_TEMPLATE = 'segment-5-11'
+TAG_FONT = '/usr/share/fonts/truetype/open-sans/OpenSans-%s.ttf'  # шрифт тегов титула, как в engine.py
 
 log = logging.getLogger('pipeline')
 
@@ -105,7 +108,32 @@ def set_subject(pptx, subject, slide_no=1):
         if ''.join(t.text or '' for t in ts).strip() == 'История':
             ts[0].text = subject
             for t in ts[1:]: t.text = ''
+            widen_tag(sp, subject)
     p.save(pptx)
+
+
+def widen_tag(sp, text):
+    """Длинный предмет («Обществознание») не влезает в тег и переносится на две строки:
+    тег расширяется по тексту, теги справа в том же ряду («9 класс», «Урок 23») сдвигаются. Уже — не делаем."""
+    xfrm, body = sp.find(P_ + 'spPr/' + A_ + 'xfrm'), sp.find('.//' + A_ + 'bodyPr')
+    if xfrm is None or body is None: return
+    off, ext = xfrm.find(A_ + 'off'), xfrm.find(A_ + 'ext')
+    x, y, w, h = int(off.get('x')), int(off.get('y')), int(ext.get('cx')), int(ext.get('cy'))
+    sz = next((int(r.get('sz')) / 100 for r in sp.iter(A_ + 'rPr', A_ + 'endParaRPr') if r.get('sz')), 14)
+    bold = any(r.get('b') == '1' for r in sp.iter(A_ + 'rPr'))
+    font = ImageFont.truetype(TAG_FONT % ('Bold' if bold else 'Regular'), int(sz * 20))
+    # у скруглённой плашки поле для текста уже на 0,29 радиуса скругления с каждой стороны
+    geom, corner = sp.find(P_ + 'spPr/' + A_ + 'prstGeom[@prst="roundRect"]'), 0
+    if geom is not None:
+        gd = geom.find('.//' + A_ + 'gd')
+        corner = 0.29289 * min(w, h) * (int(gd.get('fmla').split()[-1]) if gd is not None else 16667) / 100000
+    need = int(font.getlength(text) / 20 * 12700 + 2 * corner) + int(body.get('lIns', 91440)) + int(body.get('rIns', 91440)) + 45720
+    if need <= w: return
+    ext.set('cx', str(need))
+    for other in sp.getparent().iterchildren(P_ + 'sp'):  # соседние теги: тот же ряд, правее
+        o = other.find(P_ + 'spPr/' + A_ + 'xfrm/' + A_ + 'off')
+        if o is not None and other is not sp and abs(int(o.get('y')) - y) < 45720 and int(o.get('x')) > x:
+            o.set('x', str(int(o.get('x')) + need - w))
 
 
 def slide_words(pptx, numbers):
