@@ -150,7 +150,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .thumb__cap { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
 .flag { color: var(--accent-ink); background: var(--accent); padding: 0 5px; }
-.thumb__notes { list-style: none; margin: 6px 0 0; padding: 0; font-size: 13px; line-height: 1.5; color: var(--muted); }
+.thumb__notes { list-style: none; margin: 6px 0 0; padding: 0; font-size: 11px; line-height: 1.5; color: var(--muted); }
 
 /* ---------- просмотр слайда ---------- */
 .viewer { position: fixed; inset: 0; z-index: 10; background: var(--bg); display: grid; grid-template-rows: 48px 1fr auto; }
