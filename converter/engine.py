@@ -8,15 +8,30 @@ from PIL import ImageFont
 from common import NS, A, P, R, scheme_map, color_of
 
 EMU = 914400
-SRC_W, SRC_H = 7560000, 5400000
-TW, TH = 9144000, 6858000
-K = TW / SRC_W
-LM, RM = 360000, TW - 360000            # поля 0.39in
-CT, CB = int(0.95 * EMU), int(6.80 * EMU)  # верх/низ контентной зоны
 import os as _os
 WORK = _os.environ.get('CONV_DIR', '/home/claude/w')
 BASE = _os.environ.get('CONV_BASE', WORK + '/ex58.pptx')
 ASSETS = WORK + '/assets'
+
+
+def _base_size(path):
+    """Размер слайда базы: 4:3 — 10×7,5″, 16:9 — 10×5,625″."""
+    import zipfile
+    try:
+        with zipfile.ZipFile(path) as z: sz = re.search(rb'<p:sldSz[^>]*>', z.read('ppt/presentation.xml')).group(0)
+        return int(re.search(rb'cx="(\d+)"', sz).group(1)), int(re.search(rb'cy="(\d+)"', sz).group(1))
+    except (OSError, KeyError, AttributeError, zipfile.BadZipFile):
+        return 9144000, 6858000
+
+
+SRC_W, SRC_H = 7560000, 5400000
+TW, TH = _base_size(BASE)
+# база 16:9 устроена как 4:3, сжатая по вертикали: заголовок 0,39″ → 0,30″, текст 1,18″ → 0,89″, номер 6,79″ → 5,09″.
+# Поэтому все высоты макета 4:3 умножаются на VS (для 4:3 VS = 1 и результат прежний)
+VS = TH / 6858000
+K = TW / SRC_W
+LM, RM = 360000, TW - 360000            # поля 0.39in
+CT, CB = int(0.95 * EMU * VS), int(6.80 * EMU * VS)  # верх/низ контентной зоны
 
 DECOR_SKIP = {'faa3488e67', '05467b9d2c', '34231935b5', '0b85a8f9f9', 'e082501d22',
               # 6 класс: лиса, уголки, полоски и зигзаги старого шаблона

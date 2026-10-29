@@ -45,8 +45,12 @@
     selectTemplate(meta.templates[0].id);
   }
 
+  // пропорции слайдов шаблона (4 / 3 или 16 / 9) — для плиток выбора и превью
+  function setRatio(r) { document.body.style.setProperty('--ratio', r || '4 / 3'); }
+
   function selectTemplate(id) {
     state.template = id;
+    setRatio(currentTemplate().ratio);
     document.querySelectorAll('#templates .tab').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-id') === id));
     });
@@ -254,6 +258,7 @@
 
   function showResult(j) {
     var r = j.result;
+    setRatio(r.ratio);
     show('result');
     $('r-meta').textContent = r.template_name + ' · ' + (r.subject || '') + ' · урок ' + r.lesson + ' · ' +
       String(r.size_mb).replace('.', ',') + ' МБ';

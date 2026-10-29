@@ -73,17 +73,21 @@ def main():
         OUT, BASELINE = OUT / a.template, BASELINE / a.template
     OUT.mkdir(parents=True, exist_ok=True); BASELINE.mkdir(parents=True, exist_ok=True)
     summary, failed = [], False
-    for src in sorted(OLD.glob('*.pptx')):
+    old = ROOT / P.load_templates()[a.template].get('test_inputs', 'test_inputs/old')  # у 16:9 — своя папка
+    for src in sorted(old.glob('*.pptx')):
         lesson = lesson_of(src.name) or P.detect_lesson(src)  # номер из имени файла или с титула
-        if not lesson or (a.only and lesson != a.only): continue
-        print('\n=== %s — %s' % (lesson, src.name), flush=True)
-        out = OUT / lesson
+        # уроки ЕГЭ и интенсивы без номера: результаты — по имени файла, на титул — «11 класс · Урок 1»
+        key = lesson or re.sub(r'\W+', '_', src.stem).strip('_')[:40]
+        lesson = lesson or '11.1'
+        if a.only and a.only not in (key, lesson): continue
+        print('\n=== %s — %s' % (key, src.name), flush=True)
+        out = OUT / key
         try:
             d = P.process(src, out, lesson, a.template, choices=P.parse_choices(a.choice))
         except P.ConversionError as e:
-            print('ОШИБКА:', e); failed = True; summary.append((lesson, 'ОШИБКА: %s' % e, 0)); continue
+            print('ОШИБКА:', e); failed = True; summary.append((key, 'ОШИБКА: %s' % e, 0)); continue
         fp = fingerprint(out / 'converted.pptx')
-        bf = BASELINE / (lesson + '.json')
+        bf = BASELINE / (key + '.json')
         if a.save_baseline or not bf.exists():
             bf.write_text(json.dumps(fp, indent=1), 'utf8'); fp_status = 'записан как эталон'
         else:
@@ -96,13 +100,13 @@ def main():
             ref_missing, _ = P.parse_verify(subprocess.run(
                 [sys.executable, 'verify.py', str(src), str(refs[0])], cwd=P.CONVERTER,
                 capture_output=True, text=True).stdout)
-        (out / 'index.html').write_text(lesson_page(lesson, d, ref_previews, ref_missing, fp_status), 'utf8')
+        (out / 'index.html').write_text(lesson_page(key, d, ref_previews, ref_missing, fp_status), 'utf8')
         print('слайдов: %d (эталон: %d) | отпечаток: %s' % (len(d['previews']), len(ref_previews), fp_status))
         print('MISSING:', d['missing']); print('EXTRA:', d['extra'])
         if any('заглушка' in c['text'] for c in d['checks']): failed = True
         for s in d['stickers']: print('  стикер: слайд %d — %s' % (s['slide'], s['text']))
         for c in d['checks']: print('  проверить: слайд %s — %s' % (c['slide'] or '—', c['text']))
-        summary.append((lesson, fp_status, len(d['missing'])))
+        summary.append((key, fp_status, len(d['missing'])))
     links = ''.join('<li><a href="%s/index.html">%s</a> — отпечаток: %s; MISSING слов: %d</li>' % (l, l, html.escape(s), m)
                     for l, s, m in summary)
     (OUT / 'index.html').write_text('<!doctype html><meta charset="utf-8"><title>Тесты</title>'

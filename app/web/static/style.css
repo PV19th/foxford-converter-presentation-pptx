@@ -80,12 +80,12 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 
 .titles { display: grid; grid-template-columns: repeat(auto-fill, minmax(120px, 1fr)); gap: 12px; }
 .title-opt { position: relative; padding: 0; border: 1px solid var(--hair); background: none; cursor: pointer; }
-.title-opt img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: cover; }
+.title-opt img { display: block; width: 100%; aspect-ratio: var(--ratio, 4 / 3); object-fit: cover; }
 .title-opt:hover { border-color: var(--ink); }
 .title-opt[aria-checked="true"] { border-color: var(--ink); outline: 2px solid var(--accent); outline-offset: 2px; }
 .title-opt:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
 .title-opt span { position: absolute; left: 0; bottom: 0; padding: 1px 6px; background: var(--bg); }
-.title-opt--old i { display: flex; align-items: center; justify-content: center; aspect-ratio: 4 / 3; padding: 8px;
+.title-opt--old i { display: flex; align-items: center; justify-content: center; aspect-ratio: var(--ratio, 4 / 3); padding: 8px;
                     font-style: normal; text-align: center; }
 
 .actions { display: flex; flex-wrap: wrap; gap: 12px; align-items: center; padding-top: 28px; }
@@ -144,7 +144,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .grid-head { display: flex; justify-content: space-between; align-items: baseline; padding: 32px 0 16px; }
 .grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 28px 20px; }
 .thumb { display: block; width: 100%; padding: 0; border: 0; background: none; cursor: zoom-in; text-align: left; }
-.thumb img { display: block; width: 100%; aspect-ratio: 4 / 3; object-fit: contain; border: 1px solid var(--hair); background: var(--soft); }
+.thumb img { display: block; width: 100%; aspect-ratio: var(--ratio, 4 / 3); object-fit: contain; border: 1px solid var(--hair); background: var(--soft); }
 .thumb:hover img { border-color: var(--ink); }
 .thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .thumb__cap { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }

@@ -108,19 +108,23 @@ WIDE_PLAN = ('план урока', 'что обсудим', 'о чем пого
 
 
 def find_title_slide(slides):
-    """Титул — первый слайд с тегом «N класс»; до него бывают служебные слайды (орг. моменты, «Как дела с ДЗ»)."""
+    """Титул — первый слайд с тегом «N класс»; до него бывают служебные слайды (орг. моменты, «Как дела с ДЗ»).
+    У уроков ЕГЭ и интенсивов тега нет — тогда первый слайд на титульном макете («TITLE_1…», «Титульный слайд»)."""
     for i, s in enumerate(slides[:8], 1):
         if any(re.fullmatch(r'\d{1,2}\s*класс', text_of(el).strip()) for el in s.shapes._spTree.iter(P + 'sp')):
             return i
+    for i, s in enumerate(slides[:8], 1):
+        name = s.slide_layout.name
+        if name.startswith('TITLE') and not name.startswith('TITLE_ONLY') or 'Титульн' in name: return i
     for i, s in enumerate(slides[:8], 1):
         if get_ph(s, 'ctrTitle') is not None: return i
     return 1
 
 
 def is_footer(b):
-    """Низ слайда старого шаблона 10×7,5″: ярлык типа задания («Теория», «Групповая работа») с иконкой,
-    номер слайда. В новом шаблоне таких ярлыков нет — не переносим."""
-    return WIDE and b is not None and b[1] >= int(6.5 * IN)
+    """Низ слайда старого шаблона 10×7,5″ (и его версии 16:9): ярлык типа задания («Теория», «Групповая работа»)
+    с иконкой, номер слайда. В новом шаблоне таких ярлыков нет — не переносим."""
+    return WIDE and b is not None and b[1] >= int(SRC_H * 6.5 / 7.5)
 
 
 # Служебные слайды, которые пользователь может заменить слайдом шаблона (выбор на сайте: ключи CONV_DONOR).
@@ -166,6 +170,20 @@ def classify_wide(s, title, t):
     return None
 
 
+def title_text(src):
+    """Тема урока на титуле: заголовок титула, а если его нет (уроки ЕГЭ — тема обычной надписью) —
+    самый крупный текст слайда."""
+    t = ''
+    for el in src.shapes._spTree.iter(P + 'sp'):
+        ph = el.find('p:nvSpPr/p:nvPr/p:ph', NS)
+        if ph is not None and ph.get('type') == 'ctrTitle': t = para_text(el).strip()
+    if not t:
+        big = [(max(szs), para_text(el).strip()) for el in src.shapes._spTree.iter(P + 'sp')
+               if (szs := [int(r.get('sz')) for r in el.iter(A + 'rPr') if r.get('sz')]) and para_text(el).strip()]
+        if big: t = max(big)[1]
+    return t
+
+
 def wide_notes(src, i, kind):
     """Что методисту проверить на слайде старого шаблона 10×7,5″ (строки отчёта)."""
     notes = []
@@ -173,10 +191,10 @@ def wide_notes(src, i, kind):
     if kind == 'title':
         sps = [(el, bbox(materialize_sp(src, el))) for el in src.shapes._spTree.iter(P + 'sp')]
         grade = next((b for el, b in sps if b and re.fullmatch(r'\d{1,2}\s*класс', text_of(el).strip())), None)
-        rest = []
+        rest, theme = [], title_text(src)
         for el, b in sps:
             t = re.sub(r'\s+', ' ', para_text(el).replace('\n', ' ')).strip()
-            if not t or el is get_ph(src, 'ctrTitle') or 'навигации' in t or is_offslide(b): continue
+            if not t or el is get_ph(src, 'ctrTitle') or para_text(el).strip() == theme or 'навигации' in t or is_offslide(b): continue
             if grade and b and abs(b[1] - grade[1]) < 0.15 * IN: continue  # теги «предмет · класс · урок»
             rest.append(t[:80])
         if rest: notes.append('текст со старого титула не перенесён: «%s»' % '»; «'.join(rest))
@@ -481,7 +499,7 @@ def transfer_content(bld, src, dst, report):
     smap = scheme_map(src)
     title, title_els = slide_title_info(src)
     nl = sum(max(1, math.ceil(text_width_pt(l, 24, True) * 1.2 / 655)) for l in (title or ' ').split('\n'))
-    CT = int(0.39 * IN + nl * 24 * 1.25 * 12700 + 0.2 * IN)
+    CT = int(0.39 * IN * VS + nl * 24 * 1.25 * 12700 + 0.2 * IN * VS)
     tree = dst.shapes._spTree
     items = []
     badges, qmarks = [], []
@@ -651,7 +669,7 @@ def transfer_content(bld, src, dst, report):
             it.grid = [int(g.get('w')) for g in el.iter(A + 'gridCol')]
             it.rows = [int(tr.get('h')) for tr in el.iter(A + 'tr')]
         renumber(el)
-    if WIDE: lift_tabs(items)
+    if WIDE: unhide_white_text(items); lift_tabs(items)
     # верх контента считаем только по перенесённым элементам (пустые белые плашки и декор не в счёт)
     tops2 = [it.sb[1] for it in items] + [bb[1] for bb in badges + qmarks]
     if tops2: sy0 = min([int(0.75 * IN)] + tops2)
@@ -674,7 +692,7 @@ def transfer_content(bld, src, dst, report):
             elif it.kind == 'cxn': set_bbox(it.el, transform_box(it.sb, sy0, k, clamp=False))
             else: set_bbox(it.el, transform_box(it.sb, sy0, k))
             if it.kind == 'tbl':
-                for g, w in zip(it.el.iter(A + 'gridCol'), it.grid): g.set('w', str(int(w * (1 if WIDE else k))))
+                for g, w in zip(it.el.iter(A + 'gridCol'), it.grid): g.set('w', str(int(w * (K if WIDE else k))))
                 for tr, h in zip(it.el.iter(A + 'tr'), it.rows): tr.set('h', str(int(h * k)))
         snap_captions(items)
         declip(items)
@@ -712,14 +730,14 @@ def transfer_content(bld, src, dst, report):
             sz = int(0.9 * IN)
             cx, cy = bb[0] + bb[2] / 2, bb[1] + bb[3] / 2; x, y = cx - sz / 2, cy - sz / 2
         x = min(x, TW - sz - 0.1 * IN)
-        y = min(y, 6.72 * IN - sz)
+        y = min(y, 6.72 * IN * VS - sz)
         if sticker('vazhno.png'):
             pe = bld.add_image(dst, sticker('vazhno.png'), int(x), int(y), sz, sz, rot=470867)
             it = Item(pe, 'badge'); it.host = host; items.append(it)
         else:
             report.append('СТИКЕР ВРУЧНУЮ: «ВАЖНО» справа от плашки (место оставлено)')
     for qb in qmarks:
-        h = int(1.55 * IN); w = int(h * 376 / 518)
+        h = int(1.55 * IN * VS); w = int(h * 376 / 518)
         cx, cy = qb[0] + qb[2] / 2, qb[1] + qb[3] / 2
         x = min(max(LM, cx - w / 2), RM - w); y = min(cy - h / 2, CB - h)
         qbox = [x, y, w, h]
@@ -757,14 +775,41 @@ def transfer_content(bld, src, dst, report):
     return title
 
 
+def unhide_white_text(items):
+    """Старый шаблон 10×7,5″ и 16:9: белый текст лежал на тёмном фоне слайда («Познакомимся», контакты
+    преподавателя). Фон не переносится — текст без цветной подложки (своей заливки, плашки, картинки или группы
+    под ним) становится тёмным. На оранжевом или фиолетовом белый текст остаётся."""
+    def back(it):
+        if it.kind in ('pic', 'grp'): return True
+        spPr = it.el.find('p:spPr', NS) if it.kind == 'sp' else None
+        if spPr is None: return False
+        if spPr.find('a:gradFill', NS) is not None or spPr.find('a:blipFill', NS) is not None: return True
+        sch = spPr.find('a:solidFill/a:schemeClr', NS)
+        if sch is not None: return sch.get('val') not in ('bg1', 'lt1')  # цвет темы, кроме белого
+        f = spPr.find('a:solidFill/a:srgbClr', NS)
+        if f is None: return False
+        r, g, b = (int(f.get('val')[i:i + 2], 16) for i in (0, 2, 4))
+        return 0.299 * r + 0.587 * g + 0.114 * b < 200  # не белая и не пастельная
+    for it in items:
+        # белые «_» и пробелы в исходнике — это пустое место, не текст
+        if it.kind != 'sp' or back(it) or not re.search(r'[A-Za-zА-Яа-яЁё0-9]', text_of(it.el)): continue
+        cx, cy = it.sb[0] + it.sb[2] / 2, it.sb[1] + it.sb[3] / 2
+        if any(o is not it and back(o) and o.sb[0] <= cx <= o.sb[0] + o.sb[2] and o.sb[1] <= cy <= o.sb[1] + o.sb[3]
+               for o in items):
+            continue
+        for f in it.el.iter(A + 'srgbClr'):
+            if f.get('val') == 'FFFFFF' and f.getparent().getparent().tag in (A + 'rPr', A + 'endParaRPr'): f.set('val', '0F1115')
+
+
 def wide_box(it, sy0, k):
     """Старый шаблон 10×7,5″ (масштаб 1:1): уменьшение k — только по высоте; текст, плашки, линии и таблицы
     сохраняют ширину и левое поле (правки методиста, 9.23 сл. 5, 27), картинки и группы уменьшаются целиком
-    вокруг своего центра."""
+    вокруг своего центра. Слайд шире 10″ (13,33×7,5″) сначала сжимается по ширине в K раз."""
     x, y, w, h = it.sb
+    if K != 1: x, w = x * K, w * K
     ny, nh = CT + (y - sy0) * k, h * k
     if it.kind in ('pic', 'grp'):
-        nw = w * k; x += (w - nw) / 2; w = nw
+        nw = w * k / K; x += (w - nw) / 2; w = nw
     if it.kind != 'cxn':
         if w > RM - LM: x, w = LM, RM - LM
         x = min(max(x, LM), RM - w)
@@ -1213,7 +1258,7 @@ def build_title(bld, src, lesson_no, title):
             if LM + text_width_pt(lines[-1], fs, True) * 12700 * 1.05 > pb[0]:
                 need_top = bbox(tsp)[1] + int(len(lines) * fs * 1.35 * 12700) + int(0.12 * IN)
                 if pb[1] < need_top:
-                    pb[1] = min(need_top, int(6.5 * IN) - pb[3]); set_bbox(dpic, pb)
+                    pb[1] = min(need_top, int(6.5 * IN * VS) - pb[3]); set_bbox(dpic, pb)
     return s
 
 
@@ -1292,7 +1337,7 @@ def build_plan(bld, src):
     off = gf.find('p:xfrm/a:off', NS)
     lines = sum(max(1, math.ceil(text_width_pt(t, 16, False) / 225)) for t in rows)
     h = len(rows) * 0.22 * IN + lines * 0.30 * IN
-    off.set('y', str(int(max(1.3 * IN, 6.25 * IN - h))))
+    off.set('y', str(int(max(1.3 * IN * VS, 6.25 * IN * VS - h))))
     # картинка источника → в рамку донора (cover-crop)
     spic = None
     for pic in src._element.iter(P + 'pic'):
@@ -1415,9 +1460,9 @@ def build_why(bld, src):
     # текст — плашкой под заголовком на всю ширину (как в 6.2), картинка — на всё оставшееся поле
     tb = body.find('p:txBody', NS)
     need = estimate_height(tb, RM - LM)
-    set_bbox(body, [LM, int(0.95 * IN), RM - LM, need])
-    top = int(0.95 * IN) + need + int(0.2 * IN)
-    box = [LM, top, RM - LM, int(6.75 * IN) - top]
+    set_bbox(body, [LM, int(0.95 * IN * VS), RM - LM, need])
+    top = int(0.95 * IN * VS) + need + int(0.2 * IN)
+    box = [LM, top, RM - LM, int(6.75 * IN * VS) - top]
     parts = []
     for el in list(src.shapes._spTree)[2:]:
         ln = etree.QName(el).localname
@@ -1462,7 +1507,7 @@ def build_think(bld, src, report):
     qs = src_items_by_y(src, lambda ne, el: el not in tels and len(text_of(ne).strip()) > 2 and 'навигации' not in text_of(ne))
     # вопрос
     qx = max(int(2.9 * IN), LM + tw + int(0.3 * IN))
-    q_bottom = int(1.1 * IN)
+    q_bottom = int(1.1 * IN * VS)
     for n, (_, _, ne, el) in enumerate(qs):
         q = _src_block(src, el, smap)
         _strip_fill(q)
@@ -1470,18 +1515,18 @@ def build_think(bld, src, report):
         bp = tb.find('a:bodyPr', NS); bp.set('lIns', '0'); bp.set('rIns', '0'); bp.set('anchor', 't')
         w = RM - qx
         need = estimate_height(tb, w)
-        if need > 1.2 * IN:
+        if need > 1.2 * IN * VS:
             for rp in q.iter(A + 'rPr', A + 'endParaRPr'): rp.set('sz', '1400')
             need = estimate_height(tb, w)
-        y = int(0.37 * IN) if n == 0 else q_bottom
-        if need > 1.25 * IN or n > 0 and y + need > 1.6 * IN:  # не влезает рядом с заголовком — под заголовок
+        y = int(0.37 * IN * VS) if n == 0 else q_bottom
+        if need > 1.25 * IN * VS or n > 0 and y + need > 1.6 * IN * VS:  # не влезает рядом с заголовком — под заголовок
             qx2 = LM; w = RM - LM; need = estimate_height(tb, w)
-            y = max(q_bottom, int(1.0 * IN)); set_bbox(q, [qx2, y, w, need])
+            y = max(q_bottom, int(1.0 * IN * VS)); set_bbox(q, [qx2, y, w, need])
         else:
             set_bbox(q, [qx, y, w, need])
         q_bottom = max(q_bottom, y + need)
         tree.append(q)
-    top = max(int(1.5 * IN), q_bottom + int(0.12 * IN)); bot = int(6.75 * IN)
+    top = max(int(1.5 * IN * VS), q_bottom + int(0.12 * IN)); bot = int(6.75 * IN * VS)
     x0 = LM + (int(1.45 * IN) if qm else 0)
     region = [x0, top, RM - x0, bot - top]
     gap = int(0.15 * IN)
@@ -1498,7 +1543,7 @@ def build_think(bld, src, report):
             boxes.append([x, region[1] + (region[3] - h) / 2, w, h]); x += w + gap
     for p, b in zip(pics, boxes): _pic_copy(bld, src, s, p, b)
     if qm:
-        h = int(1.55 * IN); w = int(h * 376 / 518)
+        h = int(1.55 * IN * VS); w = int(h * 376 / 518)
         pb = min(b[1] + b[3] for b in boxes)
         if sticker('qmark.png'):
             bld.add_image(s, sticker('qmark.png'), LM + int(0.1 * IN), int(min(bot - h, pb - h)), w, h)
@@ -1544,8 +1589,8 @@ def build_wait(bld, src):
     tree = s.shapes._spTree
     for g in gfs: tree.remove(g)
     n = len(its)
-    step = DONOR.get('wait_step', 1.53) * IN
-    y0 = DONOR.get('wait_center', 3.74) * IN - step * (n - 1) / 2
+    step = DONOR.get('wait_step', 1.53) * IN * VS
+    y0 = DONOR.get('wait_center', 3.74) * IN * VS - step * (n - 1) / 2
     for i, (el, ne) in enumerate(its):
         g = copy.deepcopy(tmpl)
         g.find('p:nvGraphicFramePr/p:cNvPr', NS).set('id', str(900 + i))
@@ -1592,17 +1637,17 @@ def build_summary(bld, src):
     n = len(rows)
     y = max(1.9, 2.77 - (n - 3) * 0.45) * IN
     if WIDE:  # старый шаблон 10×7,5″ (правка методиста, 9.23 сл. 31): таблица под картинкой донора, строки сжаты по месту
-        y = max(y, 2.1 * IN)
+        y = max(y, 2.1 * IN * VS)
         trs = tbl.findall('a:tr', NS)
         w = [int(g.get('w')) for g in tbl.iter(A + 'gridCol')][1]
         need = lambda tr: estimate_height(tr.findall('a:tc', NS)[1].find('a:txBody', NS), w) + int(0.15 * IN)
-        if sum(map(need, trs)) > 6.75 * IN - y:  # не влезает — кегль 14
+        if sum(map(need, trs)) > 6.75 * IN * VS - y:  # не влезает — кегль 14
             for tr in trs:
                 for rp in tr.findall('a:tc', NS)[1].iter(A + 'rPr', A + 'endParaRPr'):
                     if rp.get('sz') == '1600': rp.set('sz', '1400')
         hs = [need(tr) for tr in trs]
-        y = min(y, max(1.3 * IN, 6.75 * IN - sum(hs)))
-        extra = max(0, 6.75 * IN - y - sum(hs)) / len(trs)
+        y = min(y, max(1.3 * IN * VS, 6.75 * IN * VS - sum(hs)))
+        extra = max(0, 6.75 * IN * VS - y - sum(hs)) / len(trs)
         for tr, h in zip(trs, hs): tr.set('h', str(int(max(h, min(int(tr.get('h')), h + extra)))))
         ext = gf.find('p:xfrm/a:ext', NS)
         ext.set('cx', str(sum(int(g.get('w')) for g in tbl.iter(A + 'gridCol')))); ext.set('cy', str(sum(int(tr.get('h')) for tr in trs)))
@@ -1709,8 +1754,8 @@ def build_links(bld, srcs):
                 r = etree.SubElement(p, A + 'r'); r.append(rp); etree.SubElement(r, A + 't').text = t
             bld._remap_rels(p, srcmap[base + pi_].part, s.part)
         x = bd.find('p:spPr/a:xfrm', NS)
-        x.find('a:off', NS).set('x', str(x0 + ci * (wcol + int(0.25 * IN)))); x.find('a:off', NS).set('y', str(int(1.25 * IN)))
-        x.find('a:ext', NS).set('cx', str(wcol)); x.find('a:ext', NS).set('cy', str(int(5.3 * IN)))
+        x.find('a:off', NS).set('x', str(x0 + ci * (wcol + int(0.25 * IN)))); x.find('a:off', NS).set('y', str(int(1.25 * IN * VS)))
+        x.find('a:ext', NS).set('cx', str(wcol)); x.find('a:ext', NS).set('cy', str(int(5.3 * IN * VS)))
     return s
 
 
@@ -1738,11 +1783,7 @@ def convert(src_path, out_path, lesson_no, overrides=None):
         rep = []
         if kind == 'title':
             title, _ = slide_title_info(src)
-            t = ''
-            for el in src.shapes._spTree.iter(P + 'sp'):
-                ph = el.find('p:nvSpPr/p:nvPr/p:ph', NS)
-                if ph is not None and ph.get('type') == 'ctrTitle': t = para_text(el).strip()
-            s = build_title(bld, src, lesson_no, t)
+            s = build_title(bld, src, lesson_no, title_text(src))
         elif kind == 'plan': s = build_plan(bld, src)
         elif kind == 'divider':
             s = build_divider(bld, src, div_k); div_k += 1; section += 1

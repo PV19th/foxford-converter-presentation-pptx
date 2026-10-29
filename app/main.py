@@ -106,6 +106,7 @@ def index(): return page('index.html')
 def meta():
     tpls = [{'id': k, 'name': v['name'], 'grades': pipeline.profile_grades(v),
              'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()],
+             'ratio': v.get('ratio', '4 / 3'),
              'thumbs_v': version(sorted((pipeline.TEMPLATES / k / 'thumbs').glob('*.jpg')))}
             for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))]
     return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS, 'subjects': texts.SUBJECTS,

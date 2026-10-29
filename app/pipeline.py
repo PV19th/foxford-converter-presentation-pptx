@@ -100,23 +100,31 @@ def detect_lesson(pptx):
 
 
 def set_subject(pptx, subject, slide_no=1):
-    """Конвертер ставит на титул тег «История»; для других предметов меняем его текст."""
+    """Конвертер ставит на титул тег «История»; для других предметов меняем его текст.
+    Теги, в которые текст не влезает («Обществознание», «11 класс»), расширяются (widen_tag)."""
     from pptx import Presentation
     p = Presentation(pptx)
+    changed, tags = False, []
     for sp in p.slides[slide_no - 1]._element.iter(P_ + 'sp'):
         ts = list(sp.iter(A_ + 't'))
-        if ''.join(t.text or '' for t in ts).strip() == 'История':
-            ts[0].text = subject
+        text = ''.join(t.text or '' for t in ts).strip()
+        if text == 'История' and subject != 'История':
+            ts[0].text = text = subject
             for t in ts[1:]: t.text = ''
-            widen_tag(sp, subject)
-    p.save(pptx)
+            changed = True
+        off = sp.find(P_ + 'spPr/' + A_ + 'xfrm/' + A_ + 'off')
+        if off is not None and (text == subject or re.fullmatch(r'\d{1,2} класс|Урок \d{1,3}', text)):
+            tags.append((int(off.get('x')), sp, text))
+    for _, sp, text in sorted(tags, key=lambda x: x[0]):  # слева направо: расширенный тег сдвигает следующие
+        changed = widen_tag(sp, text) or changed
+    if changed: p.save(pptx)
 
 
 def widen_tag(sp, text):
     """Длинный предмет («Обществознание») не влезает в тег и переносится на две строки:
     тег расширяется по тексту, теги справа в том же ряду («9 класс», «Урок 23») сдвигаются. Уже — не делаем."""
     xfrm, body = sp.find(P_ + 'spPr/' + A_ + 'xfrm'), sp.find('.//' + A_ + 'bodyPr')
-    if xfrm is None or body is None: return
+    if xfrm is None or body is None: return False
     off, ext = xfrm.find(A_ + 'off'), xfrm.find(A_ + 'ext')
     x, y, w, h = int(off.get('x')), int(off.get('y')), int(ext.get('cx')), int(ext.get('cy'))
     sz = next((int(r.get('sz')) / 100 for r in sp.iter(A_ + 'rPr', A_ + 'endParaRPr') if r.get('sz')), 14)
@@ -128,12 +136,13 @@ def widen_tag(sp, text):
         gd = geom.find('.//' + A_ + 'gd')
         corner = 0.29289 * min(w, h) * (int(gd.get('fmla').split()[-1]) if gd is not None else 16667) / 100000
     need = int(font.getlength(text) / 20 * 12700 + 2 * corner) + int(body.get('lIns', 91440)) + int(body.get('rIns', 91440)) + 45720
-    if need <= w: return
+    if need <= w: return False
     ext.set('cx', str(need))
     for other in sp.getparent().iterchildren(P_ + 'sp'):  # соседние теги: тот же ряд, правее
         o = other.find(P_ + 'spPr/' + A_ + 'xfrm/' + A_ + 'off')
         if o is not None and other is not sp and abs(int(o.get('y')) - y) < 45720 and int(o.get('x')) > x:
             o.set('x', str(int(o.get('x')) + need - w))
+    return True
 
 
 def slide_words(pptx, numbers):
@@ -148,15 +157,28 @@ def slide_words(pptx, numbers):
     return c
 
 
-def find_stubs(pptx, phrases):
-    """Тексты-заглушки шаблона («Тема урока», «Текст»…), попавшие в результат: [{'slide', 'text'}]."""
+def slide_ratio(pptx):
+    """Ширина слайда / высота: 1,33 — 4:3 (и 8,27×5,9″ старого шаблона 5–6), 1,78 — 16:9."""
+    with zipfile.ZipFile(pptx) as z: sz = re.search(rb'<p:sldSz[^>]*>', z.read('ppt/presentation.xml')).group(0)
+    return int(re.search(rb'cx="(\d+)"', sz).group(1)) / int(re.search(rb'cy="(\d+)"', sz).group(1))
+
+
+def paragraphs(pptx):
+    """(номер слайда, текст абзаца) по всей презентации."""
     from pptx import Presentation
-    found = []
     for n, s in enumerate(Presentation(pptx).slides, 1):
-        for p in s._element.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}p'):
-            t = ''.join(x.text or '' for x in p.iter('{http://schemas.openxmlformats.org/drawingml/2006/main}t')).strip()
-            hit = next((ph for ph in phrases if t == ph or (len(ph) >= 12 and ph in t)), None)
-            if hit: found.append({'slide': n, 'text': 'остался текст-заглушка шаблона «%s»' % hit})
+        for p in s._element.iter(A_ + 'p'):
+            yield n, ''.join(x.text or '' for x in p.iter(A_ + 't')).strip()
+
+
+def find_stubs(pptx, phrases, source=None):
+    """Тексты-заглушки шаблона («Тема урока», «Текст»…), попавшие в результат: [{'slide', 'text'}].
+    Абзац, который есть в старой презентации («Модуль 1» в «Прогрессе по курсу»), — текст урока, не заглушка."""
+    own = {t for _, t in paragraphs(source)} if source else set()
+    found = []
+    for n, t in paragraphs(pptx):
+        hit = next((ph for ph in phrases if t == ph or (len(ph) >= 12 and ph in t)), None)
+        if hit and t not in own: found.append({'slide': n, 'text': 'остался текст-заглушка шаблона «%s»' % hit})
     return found
 
 
@@ -314,7 +336,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     from . import texts
     subject = subject or detect_subject(source, texts.SUBJECTS) or 'История'
     title_no = next((r['slide'] for r in slides if r['kind'] == 'title'), 1)
-    if subject != 'История': set_subject(raw, subject, title_no)
+    set_subject(raw, subject, title_no)
     progress('shrink')
     run([sys.executable, 'shrink.py', str(raw), str(result), SIZE_LIMIT_MB], 'сжатие', cwd=CONVERTER)
     progress('verify')
@@ -336,8 +358,15 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
         if c.get('optional') and key not in kinds:
             checks.append({'slide': None, 'text': 'выбранный слайд «%s» не поставлен: в старой презентации нет такого слайда'
                                                   % c['label']})
-    checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', [])), key=lambda c: c['slide'] or 0)
-    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'choices': choices or {}, 'subject': subject,
+    # файл 4:3 во вкладке 16:9 (или наоборот) переносится, но всё сжимается или остаётся пустое место
+    fmt = lambda r: '16:9' if r > 1.5 else '4:3'
+    w, h = profile.get('ratio', '4 / 3').split('/')
+    old, new = slide_ratio(source), float(w) / float(h)
+    if fmt(old) != fmt(new):
+        checks.append({'slide': None, 'text': 'старая презентация %s, а выбран шаблон %s — проверьте, всё ли поместилось'
+                                              % (fmt(old), fmt(new))})
+    checks = sorted(checks + find_stubs(result, profile.get('stub_phrases', []), source), key=lambda c: c['slide'] or 0)
+    data = {'lesson': lesson, 'template': template, 'template_name': profile['name'], 'ratio': profile.get('ratio', '4 / 3'), 'choices': choices or {}, 'subject': subject,
             'slides': slides, 'previews': previews, 'missing': missing, 'extra': extra,
             'stickers': stickers, 'checks': checks,
             'size_mb': round(result.stat().st_size / 1e6, 1)}
