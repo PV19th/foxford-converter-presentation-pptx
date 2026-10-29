@@ -216,7 +216,7 @@ def manual_notes(slides):
             m = re.match(r'масштаб ([\d.]+), кегль (\d+)', note)
             if m:
                 if m.group(2) == '14': text = 'кегль уменьшен до 14 — проверьте, не тесно ли'
-                else: text = 'содержимое уменьшено до %d %%' % round(float(m.group(1)) * 100)
+                else: text = 'не влезало по высоте — сжато до %d %%, проверьте, не мелко ли' % round(float(m.group(1)) * 100)
             elif note.startswith('контент выше зоны'): text = 'содержимое не помещается по высоте'
             elif note.startswith('низ контента'): text = 'содержимое у самого нижнего края'
             elif note == 'нет заголовка': text = 'у слайда нет заголовка'

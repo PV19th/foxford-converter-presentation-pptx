@@ -8,7 +8,7 @@ from contextlib import asynccontextmanager
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
-from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from . import config, jobs, pipeline, texts
 
@@ -56,8 +56,23 @@ async def _auth(request, call_next):
     return RedirectResponse('/login', 303)
 
 
+def version(paths):
+    """Короткий хэш содержимого файлов. Он стоит в адресе (?v=…) и меняется вместе с файлами —
+    после обновления сайта или шаблона браузер не покажет старую копию из кеша."""
+    h = hashlib.sha1()
+    for p in paths: h.update(p.read_bytes())
+    return h.hexdigest()[:8]
+
+
+def page(name):
+    html = (WEB / name).read_text('utf8')
+    for f in ('style.css', 'app.js'):
+        html = html.replace('/static/%s"' % f, '/static/%s?v=%s"' % (f, version([WEB / 'static' / f])))
+    return HTMLResponse(html)
+
+
 @app.get('/login')
-def login_page(): return FileResponse(WEB / 'login.html')
+def login_page(): return page('login.html')
 
 
 @app.post('/login')
@@ -84,13 +99,14 @@ def logout():
 
 # ---------------------------------------------------------------- страница и данные
 @app.get('/')
-def index(): return FileResponse(WEB / 'index.html')
+def index(): return page('index.html')
 
 
 @app.get('/api/meta')
 def meta():
     tpls = [{'id': k, 'name': v['name'], 'grades': pipeline.profile_grades(v),
-             'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()]}
+             'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()],
+             'thumbs_v': version(sorted((pipeline.TEMPLATES / k / 'thumbs').glob('*.jpg')))}
             for k, v in sorted(pipeline.load_templates().items(), key=lambda kv: kv[1].get('order', 99))]
     return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS, 'subjects': texts.SUBJECTS,
             'contact': config.SUPPORT_CONTACT, 'max_upload_mb': config.MAX_UPLOAD_MB,
@@ -144,8 +160,8 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
 def template_thumb(tid: str, n: int):
     p = pipeline.TEMPLATES / tid / 'thumbs' / ('%d.jpg' % n)
     if tid not in pipeline.load_templates() or not p.exists(): return JSONResponse({'error': 'Нет такой картинки.'}, 404)
-    # no-cache: при новой версии шаблона номера слайдов меняются, браузер должен перепроверить картинку
-    return FileResponse(p, media_type='image/jpeg', headers={'Cache-Control': 'private, no-cache'})
+    # при новой версии шаблона меняется ?v= в адресе (см. version), поэтому кешировать можно надолго
+    return FileResponse(p, media_type='image/jpeg', headers={'Cache-Control': 'private, max-age=86400'})
 
 
 def _find(jid):

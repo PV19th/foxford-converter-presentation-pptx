@@ -81,7 +81,7 @@
       c.slides.forEach(function (n, i) {
         var b = el('button', { type: 'button', class: 'title-opt', role: 'radio', 'data-n': n,
                                'aria-label': c.label + ' ' + (i + 1) });
-        b.appendChild(el('img', { src: '/api/templates/' + t.id + '/thumbs/' + n + '.jpg', alt: '' }));
+        b.appendChild(el('img', { src: '/api/templates/' + t.id + '/thumbs/' + n + '.jpg?v=' + t.thumbs_v, alt: '' }));
         b.appendChild(el('span', { class: 'mono' }, ('0' + (i + 1)).slice(-2)));
         b.addEventListener('click', function () { selectChoice(grid, c.key, n); });
         grid.appendChild(b);
