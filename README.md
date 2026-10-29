@@ -22,7 +22,7 @@ docker compose up -d --build
 - `app/main.py` — сайт (вход по паролю, загрузка, результат); `app/jobs.py` — очередь; `app/web/` — страница.
 - `app/texts.py` — тексты памятки и сообщений: их можно править без программиста.
 - `templates/<шаблон>/profile.json` — настройки шаблона: базы и слайды-доноры для каждого класса.
-- `base/` — базовые презентации (`ex58`, `ex64`) и фирменный шаблон `template_4x3_v01_26.pptx` (сжат `tools/compress_template.py`). `base/generated/` — база фирменного шаблона, её собирает `tools/build_base.py`.
+- `base/` — базовые презентации (`ex58`, `ex64`) и фирменный шаблон `template_4x3_v01_26.pptx` (миниатюры для сайта и `docs/template/` — `tools/template_previews.py`). `base/generated/` — база фирменного шаблона, её собирает `tools/build_base.py`.
 - `tests/` — прогон тестовых презентаций и отпечатки эталонных результатов (`tests/baseline/`).
 - `docs/` — README конвертера, чек-лист правок, отчёты по переносам, карта шаблона.
 

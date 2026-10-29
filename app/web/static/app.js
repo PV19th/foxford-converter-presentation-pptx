@@ -41,6 +41,7 @@
       b.addEventListener('click', function () { selectTemplate(t.id); });
       box.appendChild(b);
     });
+    box.hidden = meta.templates.length < 2;  // выбирать не из чего — полосу не показываем
     selectTemplate(meta.templates[0].id);
   }
 

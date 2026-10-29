@@ -6,8 +6,8 @@
   --line: #000;
   --hair: #e3e3e3;
   --soft: #f4f4f4;
-  --accent: #ff9900;
-  --accent-ink: #000;
+  --accent: #f96300;
+  --accent-ink: #fff;
   --error: #c4320a;
   --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
   --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
@@ -93,7 +93,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
        border: 1px solid var(--ink); background: none; cursor: pointer; text-decoration: none;
        text-transform: uppercase; letter-spacing: .08em; font-size: 13px; font-weight: 700; }
 .btn--accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn--accent:hover { background: #ffad33; border-color: #ffad33; }
+.btn--accent:hover { background: #d95600; border-color: #d95600; }
 .btn:not(.btn--accent):hover { background: var(--ink); color: var(--bg); }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }
@@ -148,7 +148,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .thumb:hover img { border-color: var(--ink); }
 .thumb:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .thumb__cap { display: flex; justify-content: space-between; gap: 8px; margin-top: 8px; }
-.flag { color: var(--ink); background: var(--accent); padding: 0 5px; }
+.flag { color: var(--accent-ink); background: var(--accent); padding: 0 5px; }
 
 /* ---------- просмотр слайда ---------- */
 .viewer { position: fixed; inset: 0; z-index: 10; background: var(--bg); display: grid; grid-template-rows: 48px 1fr auto; }
