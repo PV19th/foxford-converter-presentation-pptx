@@ -18,4 +18,4 @@ SUPPORT_CONTACT = os.environ.get('SUPPORT_CONTACT', '')
 # Ключ Anthropic — ANTHROPIC_API_KEY; ключ посредника (DS Lab) — ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL
 AI_ENABLED = bool(os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'))
 AI_VIA_PROXY = bool(os.environ.get('ANTHROPIC_BASE_URL'))
-AI_DAILY_LIMIT_RUB = float(os.environ.get('AI_DAILY_LIMIT_RUB') or 2000)
+AI_DAILY_LIMIT_RUB = float(os.environ.get('AI_DAILY_LIMIT_RUB') or 1000)
