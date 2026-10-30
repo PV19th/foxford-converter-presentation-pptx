@@ -18,6 +18,7 @@ FLAGS = ('кегль уменьшен', 'сжато до', 'не помещае�
 ROUNDS = 2
 CHECK = ('Это слайд после твоих правок. Проверь по картинке: всё ли влезло, нет ли наложений, соблюдены ли правила. '
          'Если всё хорошо — верни пустой список правок, иначе поправь.')
+FOUND = 'Автоматическая проверка геометрии нашла (исправь в первую очередь):\n- '
 USAGE = config.DATA / 'ai_usage.json'
 
 
@@ -61,6 +62,9 @@ def improve(job_dir, progress=lambda step: None):
     src_of = {s['slide']: s['src'] for s in result['slides']}
     notes = {n: [c['text'] for c in result['checks'] if c['slide'] == n] for n in todo}
     images = {n: d / 'slides' / ('%03d.jpg' % n) for n in todo}
+    original = Presentation(rules_pptx)
+    before = {n: S.problems(original.slides[n - 1]) for n in todo}  # что не так после конвертера
+    found = dict(before)
     comments, touched, cost, rounds = {}, set(), 0.0, 0
 
     for rounds in range(1, ROUNDS + 1):
@@ -73,9 +77,10 @@ def improve(job_dir, progress=lambda step: None):
             info = {'slide_size_in': [round(W / S.EMU, 3), round(H / S.EMU, 3)], 'content_zone_y_in': zone,
                     'converter_notes': notes[n], 'shapes': S.describe(prs.slides[n - 1])}
             old = d / 'ai_old' / 'slides' / ('%03d.jpg' % src_of[n]) if src_of.get(n) else None
+            note = '\n\n'.join(filter(None, [CHECK if rounds > 1 else None,
+                                              FOUND + '\n- '.join(p for p, _ in found[n]) if found[n] else None]))
             try:
-                return n, claude.ask(RULES, images[n], info, old if old and old.exists() else None,
-                                     CHECK if rounds > 1 else None)
+                return n, claude.ask(RULES, images[n], info, old if old and old.exists() else None, note or None)
             except AIError: raise
             except Exception:
                 log.exception('ИИ: слайд %d не обработан', n)
@@ -89,6 +94,7 @@ def improve(job_dir, progress=lambda step: None):
                 changed.append(n); touched.add(n)
                 if answer['comment'] and n not in comments: comments[n] = answer['comment']
                 log.info('ИИ: слайд %d, круг %d — %s', n, rounds, answer['comment'] or 'без комментария')
+        found.update({n: S.problems(prs.slides[n - 1]) for n in changed})
         prs.save(work)
         log.info('ИИ: круг %d, слайдов %d, изменено %d, %.0f ₽', rounds, len(todo), len(changed), cost)
         if not changed or rounds == ROUNDS: break
@@ -96,6 +102,14 @@ def improve(job_dir, progress=lambda step: None):
         todo, images = changed, {n: d / 'ai_new' / 'slides' / ('%03d.jpg' % n) for n in changed}
 
     _add_spent(cost)
+    # стало хуже, чем после конвертера (больше наложений и обрезанных слов) — возвращаем слайд как был
+    prs = Presentation(work)
+    for n in sorted(touched):
+        if len(found[n]) > len(before[n]):
+            S.restore(prs.slides[n - 1], original.slides[n - 1])
+            touched.discard(n); found[n] = before[n]
+            log.info('ИИ: слайд %d возвращён к версии конвертера — проблем стало больше', n)
+    prs.save(work)
     # текст правками не задевается — но проверяем, иначе отдаём версию без ИИ
     if [S.slide_text(s) for s in Presentation(work).slides] != [S.slide_text(s) for s in Presentation(rules_pptx).slides]:
         raise AIError('ИИ задел текст слайдов — его правки отменены, файл остался как после конвертера.')
@@ -105,6 +119,8 @@ def improve(job_dir, progress=lambda step: None):
     done = sorted(touched)
     result['checks'] = [c for c in result['checks']
                         if not (c['slide'] in done and any(f in c['text'] for f in FLAGS))]
+    result['checks'] += [{'slide': n, 'text': 'после ИИ: ' + u} for n in done for _, u in found[n]]
+    result['checks'].sort(key=lambda c: c['slide'] or 0)
     result['ai'] = {'model': claude.MODEL, 'rounds': rounds, 'cost_rub': round(cost),
                     'slides': [{'slide': n, 'comment': comments.get(n, 'Раскладка поправлена')} for n in done]}
     result['size_mb'] = round((d / 'result.pptx').stat().st_size / 1e6, 1)
