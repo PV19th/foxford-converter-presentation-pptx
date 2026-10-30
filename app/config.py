@@ -14,6 +14,8 @@ JOB_TTL_HOURS = float(os.environ.get('JOB_TTL_HOURS') or 24)
 MAX_UPLOAD_MB = int(os.environ.get('MAX_UPLOAD_MB') or 100)
 SUPPORT_CONTACT = os.environ.get('SUPPORT_CONTACT', '')
 
-# ИИ-доработка (этап 7): без ключа кнопки «Доработать с ИИ» на сайте нет
-AI_ENABLED = bool(os.environ.get('ANTHROPIC_API_KEY'))
-AI_DAILY_LIMIT_USD = float(os.environ.get('AI_DAILY_LIMIT_USD') or 20)
+# ИИ-доработка (этап 7): без ключа кнопки «Доработать с ИИ» на сайте нет.
+# Ключ Anthropic — ANTHROPIC_API_KEY; ключ посредника (DS Lab) — ANTHROPIC_AUTH_TOKEN + ANTHROPIC_BASE_URL
+AI_ENABLED = bool(os.environ.get('ANTHROPIC_API_KEY') or os.environ.get('ANTHROPIC_AUTH_TOKEN'))
+AI_VIA_PROXY = bool(os.environ.get('ANTHROPIC_BASE_URL'))
+AI_DAILY_LIMIT_RUB = float(os.environ.get('AI_DAILY_LIMIT_RUB') or 2000)

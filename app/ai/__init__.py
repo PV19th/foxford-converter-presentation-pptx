@@ -30,7 +30,7 @@ def flagged(result):
     return sorted({c['slide'] for c in result['checks'] if c['slide'] and any(f in c['text'] for f in FLAGS)})
 
 
-def spent_today():
+def spent_today():  # ₽ за сегодня
     try: return json.loads(USAGE.read_text('utf8')).get(str(datetime.date.today()), 0.0)
     except (OSError, ValueError): return 0.0
 
@@ -50,7 +50,7 @@ def improve(job_dir, progress=lambda step: None):
     result = json.loads((d / 'result.json').read_text('utf8'))
     todo = flagged(result)
     if not todo: raise AIError('Конвертер не пометил слайдов, которые нужно доработать.')
-    if spent_today() >= config.AI_DAILY_LIMIT_USD:
+    if spent_today() >= config.AI_DAILY_LIMIT_RUB:
         raise AIError('Дневной лимит на ИИ исчерпан. Попробуйте завтра или напишите автору сайта.')
 
     progress('ai_prepare')
@@ -88,8 +88,9 @@ def improve(job_dir, progress=lambda step: None):
             if S.apply(prs.slides[n - 1], answer['edits'], (W, H)):
                 changed.append(n); touched.add(n)
                 if answer['comment'] and n not in comments: comments[n] = answer['comment']
+                log.info('ИИ: слайд %d, круг %d — %s', n, rounds, answer['comment'] or 'без комментария')
         prs.save(work)
-        log.info('ИИ: круг %d, слайдов %d, изменено %d, $%.2f', rounds, len(todo), len(changed), cost)
+        log.info('ИИ: круг %d, слайдов %d, изменено %d, %.0f ₽', rounds, len(todo), len(changed), cost)
         if not changed or rounds == ROUNDS: break
         pipeline.render(work, d / 'ai_new')  # новые картинки — для проверки своих правок
         todo, images = changed, {n: d / 'ai_new' / 'slides' / ('%03d.jpg' % n) for n in changed}
@@ -104,7 +105,7 @@ def improve(job_dir, progress=lambda step: None):
     done = sorted(touched)
     result['checks'] = [c for c in result['checks']
                         if not (c['slide'] in done and any(f in c['text'] for f in FLAGS))]
-    result['ai'] = {'model': claude.MODEL, 'rounds': rounds, 'cost_usd': round(cost, 2),
+    result['ai'] = {'model': claude.MODEL, 'rounds': rounds, 'cost_rub': round(cost),
                     'slides': [{'slide': n, 'comment': comments.get(n, 'Раскладка поправлена')} for n in done]}
     result['size_mb'] = round((d / 'result.pptx').stat().st_size / 1e6, 1)
     (d / 'result.json').write_text(json.dumps(result, ensure_ascii=False, indent=1), 'utf8')

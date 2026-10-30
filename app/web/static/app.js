@@ -277,7 +277,7 @@
     $('r-ai-start').textContent = 'Доработать с ИИ · ' + todo.length + ' сл.';
     $('r-rules').hidden = !r.ai; $('r-rules').href = '/api/jobs/' + j.id + '/download?version=rules';
     $('r-ai-text').textContent = j.ai_error ? j.ai_error : r.ai
-      ? 'ИИ поправил слайдов: ' + r.ai.slides.length + '. Что именно — под превью. Стоимость около $' + r.ai.cost_usd + '.'
+      ? 'ИИ поправил слайдов: ' + r.ai.slides.length + '. Что именно — под превью. Стоимость около ' + r.ai.cost_rub + ' ₽.'
       : 'ИИ поправит раскладку слайдов, которые пометил конвертер: ' + todo.join(', ') + '. Текст не меняется. Около 1–3 минут.';
 
     $('r-stickers').replaceChildren(noteList(r.stickers, 'Стикеры добавлять не нужно.'));

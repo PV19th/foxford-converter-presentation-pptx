@@ -38,8 +38,9 @@ def text(el):
 
 
 def slide_text(slide):
-    """Тексты всех фигур слайда — для проверки, что правки их не задели (порядок слоёв не важен)."""
-    return sorted(text(el) for el in slide.shapes._spTree.iterchildren())
+    """Тексты всех фигур слайда — для проверки, что правки их не задели (порядок слоёв и удалённые
+    пустые фигуры не важны)."""
+    return sorted(t for t in (text(el) for el in slide.shapes._spTree.iterchildren()) if t.strip())
 
 
 LOCKED = ('title', 'ctrTitle', 'sldNum', 'ftr', 'dt')  # заголовок, номер слайда, колонтитулы ИИ не трогает
