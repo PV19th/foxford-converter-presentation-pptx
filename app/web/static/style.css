@@ -9,8 +9,9 @@
   --accent: #f96300;
   --accent-ink: #fff;
   --error: #c4320a;
-  --sans: "Helvetica Neue", Helvetica, Arial, sans-serif;
-  --mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+  /* весь сайт — Iosevka Charon Mono (Google Fonts, открытая лицензия OFL) */
+  --sans: "Iosevka Charon Mono", ui-monospace, Menlo, Consolas, monospace;
+  --mono: var(--sans);
   --gutter: 24px;
 }
 
@@ -33,15 +34,18 @@ a { color: inherit; }
 .brand { font-weight: 700; font-size: 19px; letter-spacing: .12em; text-decoration: none; text-transform: uppercase; }
 .linkbtn { background: none; border: 0; padding: 0; cursor: pointer; text-transform: uppercase;
            letter-spacing: .06em; font-size: 13px; }
-.top__side a { text-decoration: none; }
-.linkbtn:hover, .top a:hover { text-decoration: underline; text-underline-offset: 4px; }
+/* ссылки и кнопки в шапке: при наведении — обводка, как у выбранной вкладки; «Фоксфорд» не выделяется */
+.top__side a, .top .linkbtn { display: inline-block; padding: 5px 10px; margin: -6px -11px; border: 1px solid transparent;
+                               text-decoration: none; }
+.top__side a:hover, .top .linkbtn:hover { border-color: var(--ink); }
+.viewer__bar .linkbtn:hover { text-decoration: underline; text-underline-offset: 4px; }
 
 .subbar { display: flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 calc(var(--gutter) - 10px);
           border-bottom: 1px solid var(--line); overflow-x: auto; }
 .tab { border: 1px solid transparent; background: none; padding: 5px 10px; border-radius: 0;
        text-transform: uppercase; letter-spacing: .06em; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .tab[aria-pressed="true"] { border-color: var(--ink); }
-.tab:hover { text-decoration: underline; text-underline-offset: 4px; }
+.tab:hover { border-color: var(--ink); }
 .subbar__label { padding: 0 10px; }
 
 /* ---------- общий каркас ---------- */
