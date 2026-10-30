@@ -4,7 +4,7 @@
 Каждая задача — папка data/jobs/<id>/ с job.json; результаты переживают перезапуск сайта.
 Старые папки удаляются через JOB_TTL_HOURS часов."""
 import json, logging, queue, shutil, threading, time, uuid
-from . import config, pipeline, texts
+from . import ai, config, pipeline, texts
 
 log = logging.getLogger('jobs')
 _jobs = {}        # id → состояние задачи (то же, что в job.json)
@@ -46,6 +46,13 @@ def submit(job):
              job.get('subject'), job['choices'])
 
 
+def submit_ai(jid):
+    """ИИ-доработка готового результата — в ту же очередь (LibreOffice рисует превью строго по одной задаче)."""
+    job = _jobs[jid]
+    job.update(status='queued', kind='ai', step=None, ai_error=None)
+    submit(job)
+
+
 def discard(jid): shutil.rmtree(_dir(jid), ignore_errors=True)
 
 
@@ -60,6 +67,7 @@ def get(jid):
             out['ahead'] = (_pending.index(jid) if jid in _pending else 0) + (1 if busy else 0)
     if job['status'] == 'done':
         out['result'] = json.loads((_dir(jid) / 'result.json').read_text('utf8'))
+        out['ai_slides'] = ai.flagged(out['result']) if ai.available() else []
     return out
 
 
@@ -70,15 +78,18 @@ def _worker():
             if jid in _pending: _pending.remove(jid)
         job = _jobs.get(jid)
         if job is None: continue
-        job.update(status='running', step=texts.STEPS[0][0]); _save(job)
-        log.info('задача %s: начата', jid)
+        job.update(status='running', step=None); _save(job)
+        log.info('задача %s: начата (%s)', jid, job.get('kind') or 'конвертация')
 
         def progress(step):
             job['step'] = step; _save(job)
+        if job.get('kind') == 'ai':
+            _run_ai(job, progress)
+            continue
         try:
             pipeline.process(source_path(jid), _dir(jid), job['lesson'], job['template'], progress, job.get('choices'), job.get('subject'))
             job.update(status='done', step=None)
-            for name in ('source.pptx', 'converted.pptx'): (_dir(jid) / name).unlink(missing_ok=True)
+            (_dir(jid) / 'converted.pptx').unlink(missing_ok=True)  # source.pptx нужен ИИ-доработке
         except pipeline.ConversionError as e:
             job.update(status='error', error=str(e))
         except Exception:
@@ -87,6 +98,20 @@ def _worker():
         job['finished'] = time.time()
         _save(job)
         log.info('задача %s: %s', jid, job['status'])
+
+
+def _run_ai(job, progress):
+    """ИИ-доработка. Если она не удалась, результат конвертера остаётся как был, а на странице — понятная причина."""
+    try:
+        ai.improve(_dir(job['id']), progress)
+    except ai.AIError as e:
+        job['ai_error'] = str(e)
+    except Exception:
+        log.exception('задача %s: ИИ — непредвиденная ошибка', job['id'])
+        job['ai_error'] = texts.AI_UNEXPECTED
+    job.update(status='done', kind=None, step=None, finished=time.time())
+    _save(job)
+    log.info('задача %s: ИИ — %s', job['id'], job.get('ai_error') or 'готово')
 
 
 def _cleanup():
@@ -107,7 +132,11 @@ def start():
         try: job = json.loads(f.read_text('utf8'))
         except ValueError: continue
         if job['status'] in ('queued', 'running'):
-            job.update(status='error', error=texts.INTERRUPTED); _save(job)
+            if job.get('kind') == 'ai':  # прервалась ИИ-доработка — результат конвертера цел
+                job.update(status='done', kind=None, step=None, ai_error=texts.AI_INTERRUPTED)
+            else:
+                job.update(status='error', error=texts.INTERRUPTED)
+            _save(job)
         _jobs[job['id']] = job
     threading.Thread(target=_worker, daemon=True, name='worker').start()
     threading.Thread(target=_cleanup, daemon=True, name='cleanup').start()

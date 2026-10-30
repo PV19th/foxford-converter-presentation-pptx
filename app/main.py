@@ -10,7 +10,7 @@ from pathlib import Path
 from fastapi import FastAPI, File, Form, Request, UploadFile
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
-from . import config, jobs, pipeline, texts
+from . import ai, config, jobs, pipeline, texts
 
 WEB = Path(__file__).resolve().parent / 'web'
 COOKIE = 'fx_session'
@@ -112,7 +112,7 @@ def meta():
             if not v.get('hidden')]  # "hidden": профиль только для тестов, на сайте его нет
     return {'templates': tpls, 'steps': texts.STEPS, 'manual_checks': texts.MANUAL_CHECKS, 'subjects': texts.SUBJECTS,
             'contact': config.SUPPORT_CONTACT, 'max_upload_mb': config.MAX_UPLOAD_MB,
-            'ttl_hours': config.JOB_TTL_HOURS}
+            'ttl_hours': config.JOB_TTL_HOURS, 'ai': {'available': ai.available(), 'steps': texts.AI_STEPS}}
 
 
 def _bad(msg): return JSONResponse({'error': msg}, 400)
@@ -178,11 +178,26 @@ def job_status(jid: str):
 
 
 @app.get('/api/jobs/{jid}/download')
-def download(jid: str):
+def download(jid: str, version: str = ''):
+    """version=rules — файл до ИИ-доработки."""
     job = _find(jid)
     if not job or job['status'] != 'done': return JSONResponse({'error': 'Файл не готов.'}, 404)
-    return FileResponse(jobs.result_path(jid), filename=Path(job['filename']).stem + '_новый.pptx',
+    p = config.JOBS / jid / 'result_rules.pptx' if version == 'rules' else jobs.result_path(jid)
+    if not p.exists(): return JSONResponse({'error': 'Такого файла нет.'}, 404)
+    suffix = '_новый_без_ИИ.pptx' if version == 'rules' else '_новый.pptx'
+    return FileResponse(p, filename=Path(job['filename']).stem + suffix,
                         media_type='application/vnd.openxmlformats-officedocument.presentationml.presentation')
+
+
+@app.post('/api/jobs/{jid}/ai')
+def start_ai(jid: str):
+    job = _find(jid)
+    if not job or job['status'] != 'done': return _bad('Результат не готов или уже удалён.')
+    if not ai.available(): return _bad('ИИ не подключён: на сервере не задан ключ API.')
+    if not job.get('ai_slides'): return _bad('Нечего дорабатывать: конвертер не пометил слайдов.')
+    if not (config.JOBS / jid / 'source.pptx').exists(): return _bad('Старая презентация уже удалена — загрузите её ещё раз.')
+    jobs.submit_ai(jid)
+    return {'id': jid}
 
 
 @app.get('/api/jobs/{jid}/{kind}/{name}')

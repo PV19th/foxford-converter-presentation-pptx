@@ -178,7 +178,7 @@
   function showProgress(j) {
     show('progress');
     $('p-file').textContent = (j.lesson ? 'Урок ' + j.lesson + ' · ' : '') + j.filename;
-    var steps = meta.steps, now = -1, pct = 0;
+    var steps = j.kind === 'ai' ? meta.ai.steps : meta.steps, now = -1, pct = 0;
     if (j.status === 'upload') {
       $('p-status').textContent = 'Загрузка файла' + (j.pct != null ? ' · ' + Math.round(j.pct * 100) + ' %' : '');
       $('p-sub').textContent = 'Не закрывайте страницу, пока файл загружается.';
@@ -190,7 +190,7 @@
     } else {
       now = steps.map(function (s) { return s[0]; }).indexOf(j.step);
       $('p-status').textContent = now >= 0 ? steps[now][1] : 'Обработка';
-      $('p-sub').textContent = 'Обычно это занимает около минуты.';
+      $('p-sub').textContent = j.kind === 'ai' ? 'ИИ-доработка обычно занимает 1–3 минуты.' : 'Обычно это занимает около минуты.';
       pct = 0.15 + 0.85 * Math.max(now, 0) / steps.length;
     }
     $('p-bar').style.width = Math.round(pct * 100) + '%';
@@ -268,6 +268,17 @@
     notesBySlide = {};
     r.stickers.forEach(function (s) { (notesBySlide[s.slide] = notesBySlide[s.slide] || []).push('Стикер: ' + s.text); });
     r.checks.forEach(function (c) { (notesBySlide[c.slide] = notesBySlide[c.slide] || []).push(c.text); });
+    if (r.ai) r.ai.slides.forEach(function (s) { (notesBySlide[s.slide] = notesBySlide[s.slide] || []).unshift('ИИ: ' + s.comment); });
+
+    // ИИ-доработка: кнопка, если конвертер пометил слайды; после неё — что поправлено и версия без ИИ
+    var todo = j.ai_slides || [];
+    $('r-ai').hidden = !(r.ai || j.ai_error || todo.length);
+    $('r-ai-start').hidden = !todo.length; $('r-ai-start').disabled = false;
+    $('r-ai-start').textContent = 'Доработать с ИИ · ' + todo.length + ' сл.';
+    $('r-rules').hidden = !r.ai; $('r-rules').href = '/api/jobs/' + j.id + '/download?version=rules';
+    $('r-ai-text').textContent = j.ai_error ? j.ai_error : r.ai
+      ? 'ИИ поправил слайдов: ' + r.ai.slides.length + '. Что именно — под превью. Стоимость около $' + r.ai.cost_usd + '.'
+      : 'ИИ поправит раскладку слайдов, которые пометил конвертер: ' + todo.join(', ') + '. Текст не меняется. Около 1–3 минут.';
 
     $('r-stickers').replaceChildren(noteList(r.stickers, 'Стикеры добавлять не нужно.'));
     // замечания к конкретным слайдам — под их превью; здесь — только общие
@@ -305,7 +316,8 @@
       var cap = el('span', { class: 'thumb__cap mono' });
       cap.appendChild(el('span', null, ('0' + (i + 1)).slice(-2)));
       var n = notesBySlide[i + 1];
-      if (n) cap.appendChild(el('span', { class: 'flag', title: n.join('\n') }, n.some(function (t) { return /^Стикер/.test(t); }) ? 'стикер' : 'проверить'));
+      if (n) cap.appendChild(el('span', { class: 'flag', title: n.join('\n') },
+        n.some(function (t) { return /^Стикер/.test(t); }) ? 'стикер' : n.every(function (t) { return /^ИИ:/.test(t); }) ? 'ИИ' : 'проверить'));
       b.appendChild(cap);
       b.addEventListener('click', function () { openViewer(i); });
       cell.appendChild(b);
@@ -372,6 +384,11 @@
         b.textContent = 'Ссылка скопирована';
         setTimeout(function () { b.textContent = 'Скопировать ссылку на результат'; }, 2000);
       });
+    });
+    $('r-ai-start').addEventListener('click', function () {
+      var b = this; b.disabled = true;
+      api('POST', '/api/jobs/' + job.id + '/ai').then(function () { poll(job.id); })
+        .catch(function (e) { b.disabled = false; $('r-ai-text').textContent = e.message; });
     });
     window.addEventListener('hashchange', route);
     route();
