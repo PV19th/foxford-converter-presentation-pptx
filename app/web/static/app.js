@@ -280,7 +280,6 @@
       ? 'ИИ поправил слайдов: ' + r.ai.slides.length + '. Что именно — под превью. Стоимость около ' + r.ai.cost_rub + ' ₽.'
       : 'ИИ поправит раскладку слайдов, которые пометил конвертер: ' + todo.join(', ') + '. Текст не меняется. Около 1–3 минут.';
 
-    $('r-stickers').replaceChildren(noteList(r.stickers, 'Стикеры добавлять не нужно.'));
     // замечания к конкретным слайдам — под их превью; здесь — только общие
     var general = r.checks.filter(function (c) { return !c.slide; }), box = $('r-checks');
     box.replaceChildren(general.length ? noteList(general) : '');

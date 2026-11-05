@@ -21,10 +21,25 @@ TITLE_N = 1  # номер титульного слайда в исходник�
 # ---------------------------------------------------------------- стикеры
 def sticker(name):
     """Путь к стикеру из assets/ или None, если файла нет.
-    Без файла стикер не вставляется: место под него остаётся, а в отчёт по слайду
-    пишется «добавить вручную»."""
+    Без файла на отведённое место переносится старый стикер из исходника (old_sticker)."""
     path = ASSETS + '/' + name
     return path if os.path.exists(path) else None
+
+
+def old_sticker(bld, dst, src, el, x, y, w, h):
+    """Старый стикер («ВАЖНО», «?») из исходника — на место, отведённое новому, с его пропорциями и поворотом.
+    Решение автора: стикер остаётся, методист потом сам заменит его на актуальный."""
+    if etree.QName(el).localname == 'pic':
+        b = bbox(el); k = min(w / b[2], h / b[3]); nw, nh = b[2] * k, b[3] * k
+        blob = src.part.related_part(el.find('.//a:blip', NS).get(R + 'embed')).blob
+        xf = el.find('.//a:xfrm', NS); rot = int(xf.get('rot', 0)) if xf is not None else 0
+        return bld.add_image(dst, blob, int(x + (w - nw) / 2), int(y + (h - nh) / 2), int(nw), int(nh), rot=rot)
+    ne = materialize_sp(src, el)  # «ЭТО ВАЖНО» надписью: размер как у остального содержимого
+    b = bbox(ne)
+    set_bbox(ne, [x, y + (h - b[3] * K) / 2, b[2] * K, b[3] * K])
+    bld._remap_rels(ne, src.part, dst.part)
+    dst.shapes._spTree.append(ne)
+    return ne
 
 
 # ---------------------------------------------------------------- классификация
@@ -525,7 +540,7 @@ def transfer_content(bld, src, dst, report):
             if is_offslide(b) or is_footer(b): continue
             txt = text_of(ne).strip()
             if 'ЭТО ВАЖНО' in txt.upper() and len(txt) < 15:
-                badges.append(list(b)); continue
+                badges.append((list(b), el)); continue
             spPr = ne.find('p:spPr', NS)
             has_fill = spPr.find('a:solidFill', NS) is not None or spPr.find('a:gradFill', NS) is not None
             ln = spPr.find('a:ln', NS)
@@ -543,8 +558,8 @@ def transfer_content(bld, src, dst, report):
             b = bbox(el)
             if is_offslide(b) or is_footer(b): continue
             if h in DECOR_SKIP: continue
-            if h in DECOR_VAZHNO: badges.append(list(b)); continue
-            if h in DECOR_Q: qmarks.append(list(b)); continue
+            if h in DECOR_VAZHNO: badges.append((list(b), el)); continue
+            if h in DECOR_Q: qmarks.append((list(b), el)); continue
             if is_flat(src, el): continue  # одноцветная заглушка-маска
             if WIDE and b[1] <= 0.1 * IN and b[2] >= 0.95 * SRC_W and b[3] <= 2 * IN: continue  # полоса-шапка старого шаблона (9.23 сл. 1)
             ne = copy.deepcopy(el)
@@ -671,7 +686,7 @@ def transfer_content(bld, src, dst, report):
         renumber(el)
     if WIDE: unhide_white_text(items); lift_tabs(items)
     # верх контента считаем только по перенесённым элементам (пустые белые плашки и декор не в счёт)
-    tops2 = [it.sb[1] for it in items] + [bb[1] for bb in badges + qmarks]
+    tops2 = [it.sb[1] for it in items] + [bb[1] for bb, _ in badges + qmarks]
     if tops2: sy0 = min([int(0.75 * IN)] + tops2)
     # ---- раскладка с подбором масштаба
     zone = CB - CT
@@ -708,10 +723,10 @@ def transfer_content(bld, src, dst, report):
     for it in items:
         bld._remap_rels(it.el, src.part, dst.part)
         tree.append(it.el)
-    badges = [transform_box(bb, sy0, k) for bb in badges]
-    qmarks = [transform_box(bb, sy0, k) for bb in qmarks]
+    badges = [(transform_box(bb, sy0, k), el) for bb, el in badges]
+    qmarks = [(transform_box(bb, sy0, k), el) for bb, el in qmarks]
     # ---- 2) значки ВАЖНО и «?»
-    for bb in badges:
+    for bb, bel in badges:
         host = None
         for it in items:
             if it.kind == 'sp' and it.role != 'caption' and it.el.find('p:spPr/a:solidFill', NS) is not None:
@@ -733,10 +748,10 @@ def transfer_content(bld, src, dst, report):
         y = min(y, 6.72 * IN * VS - sz)
         if sticker('vazhno.png'):
             pe = bld.add_image(dst, sticker('vazhno.png'), int(x), int(y), sz, sz, rot=470867)
-            it = Item(pe, 'badge'); it.host = host; items.append(it)
         else:
-            report.append('СТИКЕР ВРУЧНУЮ: «ВАЖНО» справа от плашки (место оставлено)')
-    for qb in qmarks:
+            pe = old_sticker(bld, dst, src, bel, x, y, sz, sz)
+        it = Item(pe, 'badge'); it.host = host; items.append(it)
+    for qb, qel in qmarks:
         h = int(1.55 * IN * VS); w = int(h * 376 / 518)
         cx, cy = qb[0] + qb[2] / 2, qb[1] + qb[3] / 2
         x = min(max(LM, cx - w / 2), RM - w); y = min(cy - h / 2, CB - h)
@@ -749,9 +764,9 @@ def transfer_content(bld, src, dst, report):
         fit_text(items, report)
         if sticker('qmark.png'):
             pe = bld.add_image(dst, sticker('qmark.png'), int(x), int(y), w, h)
-            items.append(Item(pe, 'badge'))
         else:
-            report.append('СТИКЕР ВРУЧНУЮ: объёмный «?» (место оставлено)')
+            pe = old_sticker(bld, dst, src, qel, x, y, w, h)
+        items.append(Item(pe, 'badge'))
     # ---- 3) укрупнение картинок
     grow_pictures(items)
     # ---- 4) центрирование по вертикали
@@ -1497,10 +1512,10 @@ def build_think(bld, src, report):
     tsp = bld.set_title(s, title)
     tw = int((text_width_pt(title, 24, True) * 1.1 + 10) * 12700)
     tx = tsp.find('p:spPr/a:xfrm/a:ext', NS); tx.set('cx', str(tw))
-    pics, qm = [], False
+    pics, qm = [], None
     for el in src._element.iter(P + 'pic'):
         h = img_hash(src, el)
-        if h in DECOR_Q: qm = True; continue
+        if h in DECOR_Q: qm = el; continue
         if h in DECOR_SKIP or h in DECOR_VAZHNO or is_offslide(bbox(el)): continue
         pics.append(el)
     pics.sort(key=lambda e: bbox(e)[0])
@@ -1527,7 +1542,7 @@ def build_think(bld, src, report):
         q_bottom = max(q_bottom, y + need)
         tree.append(q)
     top = max(int(1.5 * IN * VS), q_bottom + int(0.12 * IN)); bot = int(6.75 * IN * VS)
-    x0 = LM + (int(1.45 * IN) if qm else 0)
+    x0 = LM + (int(1.45 * IN) if qm is not None else 0)
     region = [x0, top, RM - x0, bot - top]
     gap = int(0.15 * IN)
     if len(pics) == 1:
@@ -1542,13 +1557,13 @@ def build_think(bld, src, report):
             w = h * bbox(p)[2] / bbox(p)[3]
             boxes.append([x, region[1] + (region[3] - h) / 2, w, h]); x += w + gap
     for p, b in zip(pics, boxes): _pic_copy(bld, src, s, p, b)
-    if qm:
+    if qm is not None:
         h = int(1.55 * IN * VS); w = int(h * 376 / 518)
         pb = min(b[1] + b[3] for b in boxes)
         if sticker('qmark.png'):
             bld.add_image(s, sticker('qmark.png'), LM + int(0.1 * IN), int(min(bot - h, pb - h)), w, h)
         else:
-            report.append('СТИКЕР ВРУЧНУЮ: объёмный «?» слева внизу (место оставлено)')
+            old_sticker(bld, s, src, qm, LM + int(0.1 * IN), int(min(bot - h, pb - h)), w, h)
     return s
 
 

@@ -128,7 +128,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
 .ai { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 20px;
       padding: 24px 0; border-bottom: 1px solid var(--line); }
 .ai p { margin: 0; max-width: 64ch; }
-.cols { display: grid; grid-template-columns: repeat(3, 1fr); border-bottom: 1px solid var(--line); }
+.cols { display: grid; grid-template-columns: repeat(2, 1fr); border-bottom: 1px solid var(--line); }
 .col { padding: 28px 24px 32px; border-left: 1px solid var(--line); min-width: 0; }
 .col:first-child { border-left: 0; padding-left: 0; }
 .col:last-child { padding-right: 0; }
