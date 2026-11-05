@@ -105,6 +105,8 @@ def index(): return page('index.html')
 @app.get('/api/meta')
 def meta():
     tpls = [{'id': k, 'name': v['name'], 'grades': pipeline.profile_grades(v),
+             'group': v.get('group'),  # «Индивидуальные шаблоны» — выпадающий список в полосе шаблонов
+             'lesson': pipeline.uses_lesson(v),  # нужны ли класс, номер урока и предмет
              'choices': [dict(c, key=key) for key, c in v.get('choices', {}).items()],
              'ratio': v.get('ratio', '4 / 3'),
              'thumbs_v': version(sorted((pipeline.TEMPLATES / k / 'thumbs').glob('*.jpg')))}
@@ -119,17 +121,19 @@ def _bad(msg): return JSONResponse({'error': msg}, 400)
 
 
 @app.post('/api/jobs')
-async def create_job(file: UploadFile = File(...), template: str = Form(...), lesson: str = Form(...),
+async def create_job(file: UploadFile = File(...), template: str = Form(...), lesson: str = Form(''),
                      choices: str = Form('{}'), subject: str = Form('')):
     # macOS присылает «й» двумя символами — приводим, чтобы имя скачанного файла было обычным
     name = unicodedata.normalize('NFC', Path(file.filename or 'presentation.pptx').name)
     if not name.lower().endswith('.pptx'):
         return _bad('Нужен файл PowerPoint с расширением .pptx. Старый формат .ppt сначала пересохраните в .pptx.')
-    if not pipeline.LESSON_RE.match(lesson):
-        return _bad('Номер урока нужно писать так: класс.урок, например 5.21.')
     tpl = pipeline.load_templates().get(template)
     if tpl is None or tpl.get('hidden'): return _bad('Такого шаблона нет.')
-    if pipeline.grade_settings(tpl, lesson.split('.')[0]) is None:
+    if not pipeline.uses_lesson(tpl):
+        lesson = ''  # индивидуальный шаблон: теги переносятся со старого титула
+    elif not pipeline.LESSON_RE.match(lesson):
+        return _bad('Номер урока нужно писать так: класс.урок, например 5.21.')
+    elif pipeline.grade_settings(tpl, lesson.split('.')[0]) is None:
         return _bad('Шаблон «%s» пока не поддерживает этот класс.' % tpl['name'])
     try:
         choices = {str(k): int(v) for k, v in json.loads(choices).items()}
@@ -147,9 +151,12 @@ async def create_job(file: UploadFile = File(...), template: str = Form(...), le
                 return _bad('Файл больше %d МБ. Сожмите картинки или напишите автору.' % config.MAX_UPLOAD_MB)
             f.write(chunk)
     try:
-        pipeline.check_input(jobs.source_path(job['id']))
+        pipeline.check_input(jobs.source_path(job['id']), tpl)
     except pipeline.ConversionError as e:
         jobs.discard(job['id']); return _bad(str(e))
+    if not pipeline.uses_lesson(tpl):
+        jobs.submit(job)
+        return {'id': job['id']}
     job['subject'] = subject or pipeline.detect_subject(jobs.source_path(job['id']), texts.SUBJECTS)
     if not job['subject']:
         jobs.discard(job['id'])

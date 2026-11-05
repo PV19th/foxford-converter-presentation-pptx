@@ -15,7 +15,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from app import pipeline as P
 
 ROOT = P.ROOT
-OLD, REF = ROOT / 'test_inputs/old', ROOT / 'test_inputs/reference'
 OUT, BASELINE = ROOT / 'outputs/tests', ROOT / 'tests/baseline'
 
 
@@ -73,7 +72,9 @@ def main():
         OUT, BASELINE = OUT / a.template, BASELINE / a.template
     OUT.mkdir(parents=True, exist_ok=True); BASELINE.mkdir(parents=True, exist_ok=True)
     summary, failed = [], False
-    old = ROOT / P.load_templates()[a.template].get('test_inputs', 'test_inputs/old')  # у 16:9 — своя папка
+    profile = P.load_templates()[a.template]
+    old = ROOT / profile.get('test_inputs', 'test_inputs/old')  # у 16:9 и индивидуальных шаблонов — своя папка
+    ref_dir = ROOT / profile.get('test_reference', 'test_inputs/reference')
     for src in sorted(old.glob('*.pptx')):
         lesson = lesson_of(src.name) or P.detect_lesson(src)  # номер из имени файла или с титула
         # уроки ЕГЭ и интенсивы без номера: результаты — по имени файла, на титул — «11 класс · Урок 1»
@@ -93,7 +94,8 @@ def main():
         else:
             fp_status = compare_fp(json.loads(bf.read_text('utf8')), fp)
             if fp_status != 'совпадает': failed = True
-        refs = [r for r in REF.glob('*.pptx') if lesson_of(r.name) == lesson]
+        # эталон методиста — с тем же номером урока, а у уроков без номера — с тем же именем файла
+        refs = [r for r in ref_dir.glob('*.pptx') if lesson_of(r.name) == lesson or r.stem == src.stem]
         ref_previews, ref_missing = [], {}
         if refs:
             ref_previews = P.render(refs[0], out / 'reference')

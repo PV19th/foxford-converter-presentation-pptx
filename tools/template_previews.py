@@ -55,7 +55,9 @@ def thumbs(pages, profile_dir):
 
 if __name__ == '__main__':
     profile_dir = Path(sys.argv[1]).resolve() if len(sys.argv) > 1 else ROOT / 'templates' / 'foxford_5-11_v01_26'
-    template = ROOT / json.loads((profile_dir / 'profile.json').read_text('utf8'))['base_recipe']['template']
+    profile = json.loads((profile_dir / 'profile.json').read_text('utf8'))
+    # фирменные шаблоны: base_recipe.template; индивидуальные (движок «пересадки»): base
+    template = ROOT / (profile['base_recipe']['template'] if 'base_recipe' in profile else profile['base'])
     with tempfile.TemporaryDirectory() as tmp:
         pages = render(template, Path(tmp))
         sheets(pages, ROOT / 'docs' / 'template' / template.stem)

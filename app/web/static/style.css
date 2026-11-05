@@ -40,13 +40,23 @@ a { color: inherit; }
 .top__side a:hover, .top .linkbtn:hover { border-color: var(--ink); }
 .viewer__bar .linkbtn:hover { text-decoration: underline; text-underline-offset: 4px; }
 
-.subbar { display: flex; align-items: center; gap: 8px; min-height: 50px; padding: 0 calc(var(--gutter) - 10px);
-          border-bottom: 1px solid var(--line); overflow-x: auto; }
+.subbar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; min-height: 50px; padding: 6px calc(var(--gutter) - 10px);
+          border-bottom: 1px solid var(--line); }
 .tab { border: 1px solid transparent; background: none; padding: 5px 10px; border-radius: 0;
        text-transform: uppercase; letter-spacing: .06em; font-size: 13px; cursor: pointer; white-space: nowrap; }
 .tab[aria-pressed="true"] { border-color: var(--ink); }
 .tab:hover { border-color: var(--ink); }
 .subbar__label { padding: 0 10px; }
+/* выпадающий список «Индивидуальные шаблоны»: та же вкладка, под ней — меню в тонкой рамке */
+.dd { position: relative; }
+.dd__arrow { display: inline-block; margin-left: 8px; font-size: 11px; }
+.dd__btn[aria-expanded="true"] .dd__arrow { transform: rotate(180deg); }
+.dd__menu { position: absolute; top: calc(100% + 7px); left: 0; z-index: 5; min-width: 100%; padding: 4px 0;
+            background: var(--bg); border: 1px solid var(--ink); }
+.dd__item { display: block; width: 100%; padding: 8px 14px; border: 0; background: none; cursor: pointer; text-align: left;
+            text-transform: uppercase; letter-spacing: .06em; font-size: 13px; white-space: nowrap; }
+.dd__item:hover { background: var(--soft); }
+.dd__item[aria-checked="true"] { font-weight: 700; }
 
 /* ---------- общий каркас ---------- */
 main { max-width: 1280px; margin: 0 auto; padding: 0 var(--gutter) 96px; }

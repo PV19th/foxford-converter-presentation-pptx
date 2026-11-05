@@ -42,7 +42,13 @@ def grade_settings(profile, grade):
 
 
 def profile_grades(profile):
-    return sorted(set(profile['grades']) | set(profile.get('grade_aliases', {})), key=int)
+    return sorted(set(profile.get('grades', {})) | set(profile.get('grade_aliases', {})), key=int)
+
+
+def uses_lesson(profile):
+    """Конвертеру по правилам нужен номер урока (теги «N класс» и «Урок N» на титуле). Движок «пересадки»
+    (индивидуальные шаблоны) переносит теги со старого титула как есть — класс, урок и предмет не спрашиваем."""
+    return profile.get('engine', 'rules') != 'reskin'
 
 
 def converter_env(profile, grade, choices=None):
@@ -242,7 +248,7 @@ def manual_notes(slides):
             elif note.startswith('контент выше зоны'): text = 'содержимое не помещается по высоте'
             elif note.startswith('низ контента'): text = 'содержимое у самого нижнего края'
             elif note == 'нет заголовка': text = 'у слайда нет заголовка'
-            elif note == 'добавлен прощальный слайд': continue
+            elif note in ('добавлен прощальный слайд', 'добавлен слайд контактов'): continue
             else: text = note
             checks.append({'slide': s['slide'], 'text': text})
     return stickers, checks
@@ -288,15 +294,21 @@ def contact_sheet(paths, out, cols=6, gap=8):
 
 
 # ---------------------------------------------------------------- вся обработка
-def check_input(path):
+def themes_of(path):
+    with zipfile.ZipFile(path) as z:
+        return b' '.join(z.read(n) for n in z.namelist() if n.startswith('ppt/theme/theme')).decode('utf8', 'replace')
+
+
+def check_input(path, profile=None):
     if not zipfile.is_zipfile(path):
         raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
     with zipfile.ZipFile(path) as z:
         if 'ppt/presentation.xml' not in z.namelist():
             raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
-        themes = b' '.join(z.read(n) for n in z.namelist() if n.startswith('ppt/theme/theme'))
-    # тема нового шаблона называется «Шаблон 5–11 (2026) — Фоксфорд»
-    if 'Шаблон 5–11 (2026)'.encode('utf8') in themes:
+    themes = themes_of(path)
+    # тема нового шаблона называется «Шаблон 5–11 (2026) — Фоксфорд»; у индивидуальных — "done_theme" профиля
+    done = ['Шаблон 5–11 (2026)'] + ([profile['done_theme']] if profile and profile.get('done_theme') else [])
+    if any(t in themes for t in done):
         raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
 
 
@@ -313,37 +325,54 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     # абсолютные пути: шаги конвертера работают из папки converter/
     src, outdir = Path(src).resolve(), Path(outdir).resolve()
     outdir.mkdir(parents=True, exist_ok=True)
-    if not LESSON_RE.match(lesson):
-        raise ConversionError('Номер урока нужно писать так: класс.урок, например 5.21 или 6.18.')
-    lesson = '%s.%d' % (lesson.split('.')[0], int(lesson.split('.')[1]))  # «9.07» → «Урок 7»
     templates = load_templates()
     if template not in templates: raise ConversionError('Неизвестный шаблон: %s.' % template)
     profile = templates[template]
-    grade = lesson.split('.')[0]
-    if grade_settings(profile, grade) is None:
-        raise ConversionError('Шаблон «%s» пока не поддерживает %s класс.' % (profile['name'], grade))
+    if uses_lesson(profile):
+        if not LESSON_RE.match(lesson or ''):
+            raise ConversionError('Номер урока нужно писать так: класс.урок, например 5.21 или 6.18.')
+        lesson = '%s.%d' % (lesson.split('.')[0], int(lesson.split('.')[1]))  # «9.07» → «Урок 7»
+        grade = lesson.split('.')[0]
+        if grade_settings(profile, grade) is None:
+            raise ConversionError('Шаблон «%s» пока не поддерживает %s класс.' % (profile['name'], grade))
+    else:
+        lesson = ''
     check_choices(profile, choices)
-    check_input(src)
+    check_input(src, profile)
     source = outdir / 'source.pptx'
     if Path(src).resolve() != source.resolve(): shutil.copyfile(src, source)
     raw, result = outdir / 'converted.pptx', outdir / 'result.pptx'
 
     progress('convert')
-    ensure_base(template)
-    out = run([sys.executable, 'convert.py', str(source), str(raw), lesson], 'конвертация',
-              cwd=CONVERTER, env=converter_env(profile, grade, choices))
-    slides = parse_report(out)
-    from . import texts
-    subject = subject or detect_subject(source, texts.SUBJECTS) or 'История'
-    title_no = next((r['slide'] for r in slides if r['kind'] == 'title'), 1)
-    set_subject(raw, subject, title_no)
+    extra_checks = []
+    if profile.get('engine') == 'reskin':  # индивидуальный шаблон: перенос «пересадкой» (app/reskin.py)
+        from . import reskin
+        try:
+            slides = reskin.convert(source, raw, profile, choices)
+        except Exception:
+            log.exception('конвертация (пересадка)')
+            raise ConversionError('Не удалось выполнить шаг «конвертация».')
+        subject = None
+        if profile.get('source_theme') and profile['source_theme'] not in themes_of(source):
+            extra_checks.append({'slide': None, 'text': 'старая презентация не похожа на шаблон «%s» — проверьте результат '
+                                                        'внимательно' % profile['source_theme']})
+    else:
+        ensure_base(template)
+        out = run([sys.executable, 'convert.py', str(source), str(raw), lesson], 'конвертация',
+                  cwd=CONVERTER, env=converter_env(profile, grade, choices))
+        slides = parse_report(out)
+        from . import texts
+        subject = subject or detect_subject(source, texts.SUBJECTS) or 'История'
+        title_no = next((r['slide'] for r in slides if r['kind'] == 'title'), 1)
+        set_subject(raw, subject, title_no)
     progress('shrink')
     run([sys.executable, 'shrink.py', str(raw), str(result), SIZE_LIMIT_MB], 'сжатие', cwd=CONVERTER)
     progress('verify')
     missing, extra = parse_verify(run([sys.executable, 'verify.py', str(source), str(result)], 'сверка текста',
                                       cwd=CONVERTER))
     # слайды, заменённые по выбору пользователя слайдами шаблона, — не расхождения: убираем их слова из сверки
-    replaced = [r for r in slides if r['kind'] in (choices or {}) and profile.get('choices', {}).get(r['kind'], {}).get('optional')]
+    replaced = [r for r in slides if r.get('replaced') or
+                r['kind'] in (choices or {}) and profile.get('choices', {}).get(r['kind'], {}).get('optional')]
     if replaced:
         from collections import Counter
         missing = dict(Counter(missing) - slide_words(source, {r['src'] for r in replaced}))
@@ -351,6 +380,7 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     progress('render')
     previews = render(result, outdir)
     stickers, checks = manual_notes(slides)
+    checks += extra_checks
     # необязательный выбор (мотивашка, рефлексия, оценка урока) заменяет слайд старой презентации — если он там есть
     kinds = {r['kind'] for r in slides}
     for key in choices or {}:
@@ -381,7 +411,8 @@ def parse_choices(items):
 
 def main():
     ap = argparse.ArgumentParser(description='Перенос старой презентации в новый шаблон')
-    ap.add_argument('src'); ap.add_argument('outdir'); ap.add_argument('lesson', help='класс.урок, например 5.21')
+    ap.add_argument('src'); ap.add_argument('outdir')
+    ap.add_argument('lesson', nargs='?', default='', help='класс.урок, например 5.21 (индивидуальным шаблонам не нужен)')
     ap.add_argument('--template', default=DEFAULT_TEMPLATE)
     ap.add_argument('--subject', help='предмет для тега на титуле (по умолчанию — из старой презентации)')
     ap.add_argument('--choice', action='append', default=[], metavar='КЛЮЧ=НОМЕР',

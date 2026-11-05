@@ -34,15 +34,50 @@
     return meta.templates.filter(function (t) { return t.id === state.template; })[0];
   }
 
+  // шаблоны — вкладками; шаблоны с "group" (индивидуальные) — выпадающим списком в той же полосе
   function renderTemplates() {
-    var box = $('templates');
+    var box = $('templates'), groups = {};
     meta.templates.forEach(function (t) {
-      var b = el('button', { type: 'button', class: 'tab', 'data-id': t.id }, t.name);
-      b.addEventListener('click', function () { selectTemplate(t.id); });
-      box.appendChild(b);
+      if (!t.group) {
+        var b = el('button', { type: 'button', class: 'tab', 'data-id': t.id }, t.name);
+        b.addEventListener('click', function () { selectTemplate(t.id); });
+        box.appendChild(b);
+        return;
+      }
+      var g = groups[t.group];
+      if (!g) {
+        g = groups[t.group] = el('div', { class: 'dd' });
+        var btn = el('button', { type: 'button', class: 'tab dd__btn', 'aria-haspopup': 'true', 'aria-expanded': 'false',
+                                 'data-group': t.group });
+        btn.appendChild(el('span', { class: 'dd__label' }, t.group));
+        btn.appendChild(el('span', { class: 'dd__arrow', 'aria-hidden': 'true' }, '▾'));
+        btn.addEventListener('click', function (e) { e.stopPropagation(); toggleMenu(g); });
+        g.appendChild(btn);
+        g.appendChild(el('div', { class: 'dd__menu', role: 'menu', hidden: '' }));
+        box.appendChild(g);
+      }
+      var item = el('button', { type: 'button', class: 'dd__item', role: 'menuitemradio', 'data-id': t.id }, t.name);
+      item.addEventListener('click', function () { closeMenus(); selectTemplate(t.id); });
+      g.querySelector('.dd__menu').appendChild(item);
     });
+    document.addEventListener('click', closeMenus);
+    document.addEventListener('keydown', function (e) { if (e.key === 'Escape') closeMenus(); });
     box.hidden = meta.templates.length < 2;  // выбирать не из чего — полосу не показываем
     selectTemplate(meta.templates[0].id);
+  }
+
+  function toggleMenu(g) {
+    var open = g.querySelector('.dd__menu').hidden;
+    closeMenus();
+    g.querySelector('.dd__menu').hidden = !open;
+    g.querySelector('.dd__btn').setAttribute('aria-expanded', String(open));
+  }
+
+  function closeMenus() {
+    document.querySelectorAll('#templates .dd').forEach(function (g) {
+      g.querySelector('.dd__menu').hidden = true;
+      g.querySelector('.dd__btn').setAttribute('aria-expanded', 'false');
+    });
   }
 
   // пропорции слайдов шаблона (4 / 3 или 16 / 9) — для плиток выбора и превью
@@ -50,35 +85,49 @@
 
   function selectTemplate(id) {
     state.template = id;
-    setRatio(currentTemplate().ratio);
-    document.querySelectorAll('#templates .tab').forEach(function (b) {
+    var t = currentTemplate();
+    setRatio(t.ratio);
+    document.querySelectorAll('#templates .tab[data-id]').forEach(function (b) {
       b.setAttribute('aria-pressed', String(b.getAttribute('data-id') === id));
     });
-    var grades = currentTemplate().grades;
+    // выпадающий список: выбран шаблон из него — кнопка в рамке и с его названием
+    document.querySelectorAll('#templates .dd').forEach(function (g) {
+      var btn = g.querySelector('.dd__btn'), group = btn.getAttribute('data-group'), on = t.group === group;
+      btn.setAttribute('aria-pressed', String(on));
+      btn.querySelector('.dd__label').textContent = on ? group + ' · ' + t.name : group;
+      g.querySelectorAll('.dd__item').forEach(function (i) {
+        i.setAttribute('aria-checked', String(i.getAttribute('data-id') === id));
+      });
+    });
+    // индивидуальным шаблонам класс, номер урока и предмет не нужны: теги переносятся со старого титула
+    ['row-grade', 'row-lesson', 'row-subject'].forEach(function (r) { $(r).hidden = !t.lesson; });
     var box = $('grades'); box.innerHTML = '';
-    grades.forEach(function (g) {
+    t.grades.forEach(function (g) {
       var b = el('button', { type: 'button', 'data-grade': g, 'aria-label': g + ' класс' }, g);
       b.addEventListener('click', function () { selectGrade(g); });
       box.appendChild(b);
     });
-    selectGrade(grades.indexOf(state.grade) >= 0 ? state.grade : grades[0]);
+    if (t.grades.length) selectGrade(t.grades.indexOf(state.grade) >= 0 ? state.grade : t.grades[0]);
     renderChoices();
   }
 
   // варианты слайдов шаблона (титул, прощание…): строка формы с миниатюрами на каждый.
-  // Необязательный выбор (optional) начинается с плитки «Как в старой»: слайд останется из старой презентации
+  // Необязательный выбор (optional) начинается с плитки «Как в старой»: слайд останется из старой презентации;
+  // выбор с "auto_label" — с плитки «По экзамену»: вариант подберётся сам (контакты ОГЭ / ЕГЭ)
   function renderChoices() {
     var t = currentTemplate(), rows = $('choice-rows');
     rows.innerHTML = ''; state.choices = {};
+    var first = t.lesson ? 5 : 2;  // номера строк формы идут после «Файла» (и класса, урока, предмета)
     t.choices.forEach(function (c, ci) {
       var row = el('div', { class: 'row' });
-      var lab = el('div', { class: 'row__label mono muted' }, ('0' + (5 + ci)).slice(-2));
+      var lab = el('div', { class: 'row__label mono muted' }, ('0' + (first + ci)).slice(-2));
       lab.appendChild(el('b', null, c.label));
       var body = el('div'), grid = el('div', { class: 'titles', role: 'radiogroup', 'aria-label': c.label });
-      if (c.optional) {
+      var zero = c.optional ? 'Как в старой' : c.auto_label;
+      if (zero) {
         var old = el('button', { type: 'button', class: 'title-opt title-opt--old', role: 'radio', 'data-n': 0,
-                                 'aria-label': c.label + ': как в старой презентации' });
-        old.appendChild(el('i', { class: 'mono' }, 'Как в старой'));
+                                 'aria-label': c.label + ': ' + zero.toLowerCase() });
+        old.appendChild(el('i', { class: 'mono' }, zero));
         old.addEventListener('click', function () { selectChoice(grid, c.key, 0); });
         grid.appendChild(old);
       }
@@ -93,7 +142,7 @@
       body.appendChild(grid);
       if (c.hint) body.appendChild(el('p', { class: 'hint mono muted' }, c.hint));
       row.appendChild(lab); row.appendChild(body); rows.appendChild(row);
-      selectChoice(grid, c.key, c.optional ? 0 : c.default);
+      selectChoice(grid, c.key, zero ? 0 : c.default);
     });
   }
 
@@ -148,15 +197,17 @@
   }
 
   function submit() {
-    var n = $('lesson').value;
+    var n = $('lesson').value, t = currentTemplate(), lesson = '';
     if (!state.file) return formError('Выберите файл презентации.');
-    if (!n || +n < 1) return formError('Укажите номер урока.');
+    if (t.lesson) {
+      if (!n || +n < 1) return formError('Укажите номер урока.');
+      lesson = state.grade + '.' + (+n);
+    }
     formError('');
-    var lesson = state.grade + '.' + (+n);
     var fd = new FormData();
     fd.append('file', state.file); fd.append('template', state.template); fd.append('lesson', lesson);
     fd.append('choices', JSON.stringify(state.choices));
-    fd.append('subject', $('subject').value.trim());
+    fd.append('subject', t.lesson ? $('subject').value.trim() : '');
 
     showProgress({ filename: state.file.name, lesson: lesson, status: 'upload' });
     var xhr = new XMLHttpRequest();
@@ -227,7 +278,7 @@
 
   function showError(msg, j) {
     show('error');
-    $('e-file').textContent = j ? 'Урок ' + j.lesson + ' · ' + j.filename : '';
+    $('e-file').textContent = j ? (j.lesson ? 'Урок ' + j.lesson + ' · ' : '') + j.filename : '';
     $('e-message').textContent = msg;
     var c = $('e-contact'); c.innerHTML = '';
     if (meta.contact) {
@@ -260,8 +311,8 @@
     var r = j.result;
     setRatio(r.ratio);
     show('result');
-    $('r-meta').textContent = r.template_name + ' · ' + (r.subject || '') + ' · урок ' + r.lesson + ' · ' +
-      String(r.size_mb).replace('.', ',') + ' МБ';
+    $('r-meta').textContent = [r.template_name, r.subject, r.lesson && 'урок ' + r.lesson,
+      String(r.size_mb).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ');
     $('r-file').textContent = j.filename;
     $('r-download').href = '/api/jobs/' + j.id + '/download';
 
