@@ -2,7 +2,7 @@
 """Слайд глазами ИИ: список фигур с координатами (describe), применение правок раскладки (apply)
 и автоматическая проверка раскладки (problems) — она подсказывает ИИ, что не так, и не даёт сделать хуже.
 
-Правки трогают только положение и размер, кегль, выравнивание, заливку и порядок слоёв. Текст не меняется
+Правки трогают только положение и размер, кегль, выравнивание (по горизонтали и вертикали), заливку и порядок слоёв. Текст не меняется
 никогда, удалить можно только фигуру без текста."""
 import copy
 from lxml import etree
@@ -15,6 +15,9 @@ A, P = '{%s}' % NS['a'], '{%s}' % NS['p']
 KINDS = {'sp': 'фигура', 'pic': 'картинка', 'grpSp': 'группа', 'graphicFrame': 'таблица', 'cxnSp': 'линия'}
 PALETTE = ['641FF1', 'EEE5FF', 'FF9900', 'FFEED7', '71D2FF', 'CCEAFF', 'FFFA7D', 'FFFED6', 'FFFFFF']
 ALIGN = {'left': 'l', 'center': 'ctr', 'right': 'r'}
+VALIGN = {'top': 't', 'middle': 'ctr', 'bottom': 'b'}
+# формы-стрелки старого шаблона: методист меняет их на прямоугольники — ИИ должен видеть, что ярлык нарисован стрелкой
+ARROWS = {'homePlate': 'стрелка', 'chevron': 'шеврон', 'rightArrow': 'стрелка', 'pentagon': 'стрелка'}
 FONT = '/usr/share/fonts/truetype/open-sans/OpenSans-%s.ttf'  # шрифт шаблона, как в converter/engine.py
 _fonts = {}
 
@@ -67,6 +70,11 @@ def describe(slide):
         if sizes: d['font_pt'] = sizes
         fill = el.find('p:spPr/a:solidFill/a:srgbClr', NS)
         if fill is not None: d['fill'] = fill.get('val')
+        geom = el.find('p:spPr/a:prstGeom', NS)
+        if geom is not None and geom.get('prst') in ARROWS: d['shape'] = ARROWS[geom.get('prst')]
+        body = el.find('p:txBody/a:bodyPr', NS)
+        if t and body is not None and body.get('anchor'):
+            d['valign'] = {v: k for k, v in VALIGN.items()}.get(body.get('anchor'))
         if locked(el): d['locked'] = True
         out.append(d)
     return out
@@ -122,6 +130,9 @@ def apply(slide, edits, size):
                 if pPr is None: pPr = etree.Element(A + 'pPr'); p.insert(0, pPr)
                 pPr.set('algn', ALIGN[e['align']])
             done += 1
+        body = el.find('p:txBody/a:bodyPr', NS)
+        if e.get('valign') in VALIGN and body is not None:
+            body.set('anchor', VALIGN[e['valign']]); done += 1
         if e.get('fill') in PALETTE + ['none'] and _set_fill(el, e['fill']): done += 1
         if e.get('z') in ('front', 'back'):
             tree = el.getparent(); tree.remove(el)

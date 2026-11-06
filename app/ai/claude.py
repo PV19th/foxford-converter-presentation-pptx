@@ -21,10 +21,11 @@ SCHEMA = {
         'comment': {'type': 'string'},
         'edits': {'type': 'array', 'items': {
             'type': 'object', 'additionalProperties': False,
-            'required': ['id', 'x', 'y', 'w', 'h', 'font_pt', 'align', 'fill', 'z', 'delete'],
+            'required': ['id', 'x', 'y', 'w', 'h', 'font_pt', 'align', 'valign', 'fill', 'z', 'delete'],
             'properties': {
                 'id': {'type': 'integer'}, 'x': _num, 'y': _num, 'w': _num, 'h': _num, 'font_pt': _num,
                 'align': _enum('left', 'center', 'right'),
+                'valign': _enum('top', 'middle', 'bottom'),
                 'fill': _enum('641FF1', 'EEE5FF', 'FF9900', 'FFEED7', '71D2FF', 'CCEAFF', 'FFFA7D', 'FFFED6', 'FFFFFF', 'none'),
                 'z': _enum('front', 'back'),
                 'delete': {'type': 'boolean'}}}}}}

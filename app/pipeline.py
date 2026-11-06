@@ -174,7 +174,7 @@ def paragraphs(pptx):
     from pptx import Presentation
     for n, s in enumerate(Presentation(pptx).slides, 1):
         for p in s._element.iter(A_ + 'p'):
-            yield n, ''.join(x.text or '' for x in p.iter(A_ + 't')).strip()
+            yield n, ''.join(x.text or '' for x in p.iter(A_ + 't')).replace('\xa0', ' ').strip()  # неразрывный пробел — как обычный
 
 
 def find_stubs(pptx, phrases, source=None):

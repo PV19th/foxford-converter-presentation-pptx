@@ -684,7 +684,7 @@ def transfer_content(bld, src, dst, report):
             it.grid = [int(g.get('w')) for g in el.iter(A + 'gridCol')]
             it.rows = [int(tr.get('h')) for tr in el.iter(A + 'tr')]
         renumber(el)
-    if WIDE: unhide_white_text(items); lift_tabs(items)
+    if WIDE: unhide_white_text(items); lift_tabs(items); flat_arrows(items); pair_colors(items); thank_you(items)
     # верх контента считаем только по перенесённым элементам (пустые белые плашки и декор не в счёт)
     tops2 = [it.sb[1] for it in items] + [bb[1] for bb, _ in badges + qmarks]
     if tops2: sy0 = min([int(0.75 * IN)] + tops2)
@@ -841,6 +841,121 @@ def lift_tabs(items):
             if t is not p and tb[3] < 0.6 * IN and tb[2] < 0.7 * pb[2] and pb[3] > 2 * tb[3] \
                     and tb[1] < pb[1] < tb[1] + tb[3] and pb[0] - 0.1 * IN <= tb[0] <= pb[0] + pb[2]:
                 tb[1] = pb[1] - tb[3]
+
+
+ARROW_GEOMS = ('homePlate', 'chevron', 'pentagon')
+PAIR = {'641FF1': 'EEE5FF', 'FF9900': 'FFEED7', '71D2FF': 'CCEAFF'}  # ярлык или номер → его карточка
+
+
+def _fill_hex(el):
+    f = el.find('p:spPr/a:solidFill/a:srgbClr', NS)
+    return f.get('val').upper() if f is not None else None
+
+
+def _set_fill_hex(el, hexv):
+    spPr = el.find('p:spPr', NS)
+    old = next((c for c in spPr if etree.QName(c).localname in ('solidFill', 'noFill')), None)
+    if old is not None: spPr.replace(old, solid(hexv))
+    else: insert_spPr_child(spPr, solid(hexv))
+
+
+def flat_arrows(items):
+    """Старый шаблон 10×7,5″ и 16:9: ярлыки («БИ:», «УЗНАЕМ», «Основной цех») и номера карточек нарисованы
+    стрелкой — методист меняет их на прямоугольники (9.07 сл. 1, 4, 10, 11, 17, 24, 25, 36). Номер — полоса
+    у левого края карточки, сама карточка начинается сразу за полосой: стрелка заходила на неё остриём."""
+    nums = []
+    for it in items:
+        for sp in it.el.iter(P + 'sp'):
+            g = sp.find('p:spPr/a:prstGeom', NS)
+            if g is None or g.get('prst') not in ARROW_GEOMS: continue
+            g.set('prst', 'rect')
+            for c in list(g): g.remove(c)
+            etree.SubElement(g, A + 'avLst')
+            if sp is it.el and len(text_of(sp).strip()) <= 3: nums.append(it)
+    for n in nums:
+        nb = n.sb
+        for c in items:
+            cb = c.sb
+            if c is n or c.kind != 'sp' or not nb[0] <= cb[0] < nb[0] + nb[2]: continue
+            if min(nb[1] + nb[3], cb[1] + cb[3]) - max(nb[1], cb[1]) < 0.8 * min(nb[3], cb[3]): continue
+            d = nb[0] + nb[2] - cb[0]
+            cb[0] += d; cb[2] -= d
+
+
+def pair_colors(items):
+    """Цвет карточки — пара её ярлыка или номера: фиолетовый → лавандовая, оранжевый → персиковая, голубой →
+    голубая (правки методиста: 9.07 сл. 1, 4, 6, 10, 11, 24, 25; литература 16:9 сл. 9, 11, 12, 24). Текст под
+    ярлыком без заливки получает плашку, если ярлык в ряду один. Два одинаковых ярлыка над карточками в одном ряду —
+    разного цвета: второй фиолетовый становится оранжевым и наоборот (9.07 сл. 36); три и больше остаются (9.07 сл. 4)."""
+    sps = [it for it in items if it.kind == 'sp']
+    marks = []  # (ярлык или номер, его карточка)
+    for m in sps:
+        col, mb = _fill_hex(m.el), m.sb
+        if col not in PAIR: continue
+        for c in sps:
+            cb = c.sb
+            if c is m or c.role == 'caption' or not (_fill_hex(c.el) or text_of(c.el).strip()) or cb[2] * cb[3] <= mb[2] * mb[3]:
+                continue  # подпись к картинке остаётся без заливки (раздел 5.1)
+            # рамка под картинку (логотипы, 9.07 сл. 17) остаётся белой: в ней нет текста, а внутри — картинка
+            if not re.search(r'[A-Za-zА-Яа-яЁё0-9]', text_of(c.el)) and any(
+                    p.kind == 'pic' and cb[0] <= p.sb[0] + p.sb[2] / 2 <= cb[0] + cb[2] and cb[1] <= p.sb[1] + p.sb[3] / 2 <= cb[1] + cb[3]
+                    for p in items): continue
+            # ярлык над карточкой: стоит вплотную или заходит на её верх не больше чем на 0,6 своей высоты
+            tag = (mb[3] < 0.6 * IN and len(text_of(m.el).strip()) <= 40 and re.search(r'[A-Za-zА-Яа-яЁё]', text_of(m.el))
+                   and cb[0] - 0.1 * IN <= mb[0] <= cb[0] + 0.3 * cb[2]
+                   and mb[1] < cb[1] and cb[1] - 0.05 * IN <= mb[1] + mb[3] <= cb[1] + 0.6 * mb[3])
+            num = (len(text_of(m.el).strip()) <= 3 and abs(cb[0] - (mb[0] + mb[2])) <= 0.05 * IN
+                   and min(mb[1] + mb[3], cb[1] + cb[3]) - max(mb[1], cb[1]) >= 0.8 * min(mb[3], cb[3]))
+            if tag or num: marks.append((m, c, tag, _fill_hex(c.el) is not None)); break
+    for g in [it for it in items if it.kind == 'grp']:  # значок-номер в углу карточки (9.07 сл. 6)
+        col = next((h for sp in g.el.iter(P + 'sp') if (h := _fill_hex(sp)) in PAIR), None)
+        gb = g.sb
+        host = next((c for c in sps if col and c.sb[0] <= gb[0] + gb[2] / 2 <= c.sb[0] + c.sb[2]
+                     and c.sb[1] - 0.1 * IN <= gb[1] <= c.sb[1] + 0.3 * c.sb[3] and _fill_hex(c.el)), None)
+        if host is not None: _set_fill_hex(host.el, PAIR[col])
+    row_of = lambda c: round(c.sb[1] / (0.15 * IN))  # ряд — по верху карточек: ярлыки ряда стоят на разной высоте (9.07 сл. 4)
+    rows = {}
+    for m, c, tag, filled in marks:
+        if tag: rows.setdefault(row_of(c), []).append((m, filled))
+    for row in rows.values():  # два одинаковых ярлыка над карточками с заливкой — разного цвета (9.07 сл. 36)
+        if len(row) == 2 and all(f for _, f in row) and _fill_hex(row[0][0].el) == _fill_hex(row[1][0].el) in ('641FF1', 'FF9900'):
+            second = max((m for m, _ in row), key=lambda m: m.sb[0])
+            _set_fill_hex(second.el, 'FF9900' if _fill_hex(second.el) == '641FF1' else '641FF1')
+    for m, c, tag, filled in marks:
+        # текст без заливки получает плашку, только если ярлык над ним один в ряду (литература сл. 11, 24);
+        # ряд ярлыков над текстом без плашек — такое оформление, его не трогаем (интенсив ЕГЭ сл. 4)
+        if not filled and not (tag and len(rows.get(row_of(c), [])) == 1): continue
+        _set_fill_hex(c.el, PAIR[_fill_hex(m.el)])
+        pad_plate(c.el)
+        if tag: m.sb[1] = c.sb[1] - m.sb[3]  # ярлык — вплотную на карточку (как lift_tabs; 9.07 сл. 4)
+
+
+def thank_you(items):
+    """«Спасибо за внимание!» на последнем слайде старого шаблона — заголовком: 28 pt, жирный; имя
+    преподавателя под ним — жирным (правка методиста, литература 16:9 сл. 27)."""
+    for it in items:
+        if it.kind != 'sp' or re.sub(r'\W', '', text_of(it.el)).lower() != 'спасибозавнимание': continue
+        for r in it.el.iter(A + 'rPr', A + 'endParaRPr'): r.set('sz', '2800'); r.set('b', '1')
+        it.role = 'head'
+        hb = it.sb
+        for o in items:
+            ob = o.sb
+            if o is it or o.kind != 'sp' or not (0 < ob[1] - hb[1] <= 2.5 * IN and abs(ob[0] - hb[0]) < 0.3 * IN): continue
+            p0 = o.el.find('p:txBody/a:p', NS)
+            name = ''.join(t.text or '' for t in p0.iter(A + 't')).strip() if p0 is not None else ''
+            if re.fullmatch(r'[А-ЯЁ][а-яё]+(\s+[А-ЯЁ][а-яё]+){1,2}', name):
+                for r in p0.iter(A + 'rPr'): r.set('b', '1')
+
+
+NBSP_RE = re.compile(r'(?<![\w\-])(в|во|к|ко|с|со|у|о|об|обо|и|а|но|да|на|за|по|от|до|из|не|ни|для|без|при|про|под|над) (?=[\w«"(])',
+                     re.I)
+
+
+def nbsp(slide_el):
+    """Висячие предлоги и союзы: после коротких слов («в», «и», «на», «для»…) — неразрывный пробел, чтобы слово
+    не оставалось в конце строки (правка методиста: литература 16:9 сл. 4, 10, 14–17). Слова не меняются."""
+    for t in slide_el.iter(A + 't'):
+        if t.text and ' ' in t.text: t.text = NBSP_RE.sub(lambda m: m.group(1) + ' ', t.text)
 
 
 def blank_bottom_frac(src, pic):
@@ -1728,7 +1843,8 @@ def build_links(bld, srcs):
                              and not (WIDE and text_of(ne).strip().lower().startswith(('использованные', 'ссылки на использованные'))))
         its.sort(key=lambda x: (x[1] // int(1.0 * IN), x[0]))  # по колонкам
         for _, _, ne, el in its:
-            for para in src_paragraphs(src, el, ne, smap, sz=1200, keep_bold=False):
+            # «Использованные источники» старого шаблона — 14 pt (правка методиста, 9.07 сл. 37)
+            for para in src_paragraphs(src, el, ne, smap, sz=1400 if WIDE else 1200, keep_bold=False):
                 if ''.join(t for t, _ in para).strip(): paras.append((para, src))
     # ссылки: без нумерации, гиперссылки сохраняем
     srcmap = [src for _, src in paras]
@@ -1750,6 +1866,11 @@ def build_links(bld, srcs):
     ncol = 2 if len(paras) > 9 else 1
     cols = [paras] if ncol == 1 else [paras[:(len(paras) + 1) // 2], paras[(len(paras) + 1) // 2:]]
     x0 = int(3.0 * IN); wcol = (RM - x0 - (ncol - 1) * int(0.25 * IN)) // ncol
+    # старый шаблон: короткий список — справа от заголовка, заголовок в две строки слева (правка методиста, 9.07 сл. 37)
+    beside = WIDE and ncol == 1
+    if beside:
+        x0 = int(4.6 * IN); wcol = RM - x0
+        tb_x.find('a:ext', NS).set('cx', str(x0 - LM - int(0.2 * IN))); tb_x.find('a:ext', NS).set('cy', str(int(0.9 * IN)))
     bodies = [body] + [copy.deepcopy(body) for _ in range(ncol - 1)]
     for ci, (bd, cp) in enumerate(zip(bodies, cols)):
         if ci: tree.append(bd); bd.find('p:nvSpPr/p:cNvPr', NS).set('id', str(950 + ci))
@@ -1769,7 +1890,8 @@ def build_links(bld, srcs):
                 r = etree.SubElement(p, A + 'r'); r.append(rp); etree.SubElement(r, A + 't').text = t
             bld._remap_rels(p, srcmap[base + pi_].part, s.part)
         x = bd.find('p:spPr/a:xfrm', NS)
-        x.find('a:off', NS).set('x', str(x0 + ci * (wcol + int(0.25 * IN)))); x.find('a:off', NS).set('y', str(int(1.25 * IN * VS)))
+        y0 = int(tb_x.find('a:off', NS).get('y')) if beside else int(1.25 * IN * VS)
+        x.find('a:off', NS).set('x', str(x0 + ci * (wcol + int(0.25 * IN)))); x.find('a:off', NS).set('y', str(y0))
         x.find('a:ext', NS).set('cx', str(wcol)); x.find('a:ext', NS).set('cy', str(int(5.3 * IN * VS)))
     return s
 
@@ -1845,6 +1967,7 @@ def convert(src_path, out_path, lesson_no, overrides=None):
     order = [e for e in lst if e not in bld.orig]
     for n, sid in enumerate(order, 1):
         sl = bld.prs.part.related_part(sid.get(R + 'id'))._element
+        nbsp(sl)
         for f in sl.iter(A + 'fld'):
             if f.get('type') == 'slidenum':
                 t = f.find('a:t', NS)
