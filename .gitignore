@@ -17,3 +17,6 @@ tmp/
 
 # база, собранная tools/build_base.py из шаблона
 base/generated/
+
+# приложение для коллег, собранное desktop/build.sh (образы по ~1 ГБ, ключ ИИ)
+dist/

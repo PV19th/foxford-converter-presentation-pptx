@@ -5,8 +5,10 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PYTHONDONTWRITEBYTECODE=1 \
     LANG=C.UTF-8
 
-# LibreOffice — превью слайдов; Open Sans — расчёт переносов в engine.py; poppler — PDF → картинки
-RUN apt-get update && apt-get install -y --no-install-recommends \
+# LibreOffice — превью слайдов; Open Sans — расчёт переносов в engine.py; poppler — PDF → картинки.
+# Pipeline-Depth=0: пакеты без конвейера HTTP — иначе в некоторых сетях сборка падает с «Hash Sum mismatch»
+RUN printf 'Acquire::http::Pipeline-Depth "0";\nAcquire::Retries "3";\n' > /etc/apt/apt.conf.d/90network \
+ && apt-get update && apt-get install -y --no-install-recommends \
         python3 python3-venv \
         libreoffice-impress \
         fonts-open-sans fonts-liberation2 \

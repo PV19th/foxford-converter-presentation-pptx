@@ -8,6 +8,8 @@ DATA = Path(os.environ.get('DATA_DIR', ROOT / 'data'))
 JOBS, LOGS = DATA / 'jobs', DATA / 'logs'
 
 APP_PASSWORD = os.environ.get('APP_PASSWORD', '')
+# приложение на компьютере коллеги (desktop/): сайт открыт только с этого компьютера, вход без пароля
+LOCAL_MODE = os.environ.get('LOCAL_MODE') == '1'
 # без SECRET_KEY вход сбрасывается при каждом перезапуске сайта
 SECRET_KEY = os.environ.get('SECRET_KEY') or secrets.token_hex(32)
 JOB_TTL_HOURS = float(os.environ.get('JOB_TTL_HOURS') or 24)

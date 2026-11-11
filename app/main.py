@@ -26,7 +26,7 @@ log = logging.getLogger('site')
 
 @asynccontextmanager
 async def lifespan(app):
-    if not config.APP_PASSWORD: log.error('APP_PASSWORD не задан — войти на сайт будет нельзя')
+    if not config.APP_PASSWORD and not config.LOCAL_MODE: log.error('APP_PASSWORD не задан — войти на сайт будет нельзя')
     jobs.start()
     yield
 
@@ -41,6 +41,7 @@ def _token():
 
 
 def _authed(request):
+    if config.LOCAL_MODE: return True
     return bool(config.APP_PASSWORD) and hmac.compare_digest(request.cookies.get(COOKIE, ''), _token())
 
 
@@ -68,11 +69,15 @@ def page(name):
     html = (WEB / name).read_text('utf8')
     for f in ('style.css', 'app.js'):
         html = html.replace('/static/%s"' % f, '/static/%s?v=%s"' % (f, version([WEB / 'static' / f])))
+    if config.LOCAL_MODE:  # в приложении на компьютере входа нет — и кнопки «Выйти» тоже
+        html = re.sub(r'<form method="post" action="/logout">.*?</form>', '', html)
     return HTMLResponse(html)
 
 
 @app.get('/login')
-def login_page(): return page('login.html')
+def login_page():
+    if config.LOCAL_MODE: return RedirectResponse('/', 303)
+    return page('login.html')
 
 
 @app.post('/login')
