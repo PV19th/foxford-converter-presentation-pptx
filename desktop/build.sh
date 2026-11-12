@@ -1,8 +1,9 @@
 #!/bin/bash
 # Собирает приложение для коллег (Docker внутри, ярлыки снаружи) в dist/<версия>/:
 #   «Конвертер Фоксфорда — Mac (M1–M5) <версия>.zip»
+#   «Конвертер Фоксфорда — Mac (Intel) <версия>.zip»
 #   «Конвертер Фоксфорда — Windows <версия>.zip»
-# Запуск из корня проекта:  ./desktop/build.sh   (20–40 минут: версия для Windows собирается в эмуляции)
+# Запуск из корня проекта:  ./desktop/build.sh   (20–40 минут: версия для Windows и Mac Intel собирается в эмуляции)
 # Настройки ИИ и контакт для «Сообщить автору» берутся из .env. Папка dist/ в git не попадает.
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -26,7 +27,7 @@ env_value() { grep -E "^$1=" .env 2>/dev/null | tail -1 | cut -d= -f2- | sed -E 
 } > "$OUT/images/settings.env"
 echo "$VERSION" > "$OUT/images/version.txt"
 
-# ---------- образы: arm64 — Mac на чипе Apple, amd64 — Windows
+# ---------- образы: arm64 — Mac на чипе Apple, amd64 — Mac на Intel и Windows
 for arch in arm64 amd64; do
   echo "== Собираю образ $arch"
   docker buildx build --platform "linux/$arch" -t "$IMAGE" --load .
@@ -45,6 +46,7 @@ pack() {  # pack <название> <arch> <папка ярлыков>
   find "$dir" -name .DS_Store -delete
 }
 pack "Mac (M1–M5)" arm64 mac
+pack "Mac (Intel)" amd64 mac
 pack "Windows"     amd64 windows
 
 # Windows: .bat — с переводом строк CRLF, .ps1 — UTF-8 с BOM (иначе Windows PowerShell путает русские буквы)

@@ -26,14 +26,15 @@
 <h2>1. Какой архив нужен</h2>
 <table>
   <tr><td>Mac с чипом Apple (M1, M2, M3, M4, M5)</td><td>«Конвертер Фоксфорда — Mac (M1–M5)»</td></tr>
+  <tr><td>Mac с процессором Intel</td><td>«Конвертер Фоксфорда — Mac (Intel)»</td></tr>
   <tr><td>Windows 10 или 11</td><td>«Конвертер Фоксфорда — Windows»</td></tr>
 </table>
-<p class="note">Как узнать, какой у вас Mac: меню Apple (яблоко слева вверху) → «Об этом Mac». Нужна строка «Чип Apple M…»: Mac с процессором Intel пока не поддерживается.</p>
+<p class="note">Как узнать, какой у вас Mac: меню Apple (яблоко слева вверху) → «Об этом Mac». Строка «Чип Apple M…» — первый архив, «Процессор Intel» — второй.</p>
 
 <h2>2. Один раз: установить Docker Desktop</h2>
 <p>Docker — программа, внутри которой работает конвертер (ему нужны Linux, LibreOffice и шрифт Open Sans).</p>
 <ol>
-  <li>Скачайте Docker Desktop с сайта <code>docker.com/products/docker-desktop</code>. Для Mac выберите вариант Apple Silicon (чип M).</li>
+  <li>Скачайте Docker Desktop с сайта <code>docker.com/products/docker-desktop</code>. Для Mac выберите свой вариант: Apple Silicon (чип M) или Intel.</li>
   <li>Установите как обычную программу. На Windows установщик может попросить включить WSL 2 и перезагрузить компьютер — соглашайтесь. Для установки могут понадобиться права администратора: если их нет, обратитесь в IT.</li>
   <li>Откройте Docker Desktop. Примите условия, вход в аккаунт Docker можно пропустить (Skip). Дождитесь внизу окна надписи <b>Engine running</b>.</li>
 </ol>
