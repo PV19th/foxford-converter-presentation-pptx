@@ -56,6 +56,7 @@ Pyodide (~15 МБ) в `dist/browser-cache/`.
 
 Обновление сайта: поправить → `./browser/build.sh` и `./browser/tests/run.sh` у себя → Commit и Push. Дальше GitHub сам.
 Красный крестик на вкладке Actions значит, что сборка не прошла и на сайте осталась прежняя версия.
+Если ошибка — «Pages не включён» (ветку отправили раньше, чем настроили Pages): открыть этот запуск → Re-run all jobs.
 Контакт для «Сообщить автору» на опубликованном сайте: Settings → Secrets and variables → Actions → Variables →
 `SUPPORT_CONTACT` (он будет виден всем).
 
