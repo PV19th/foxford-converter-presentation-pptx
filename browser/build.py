@@ -8,7 +8,7 @@
 - code.zip — converter/, app/pipeline.py, app/reskin.py, app/texts.py, профили шаблонов, browser/runner.py;
 - базы шаблонов и миниатюры вариантов слайдов;
 - meta.json — то, что сайт отдаёт страницей /api/meta;
-- robots.txt и .nojekyll — для публикации на GitHub Pages (browser/publish.sh).
+- robots.txt и .nojekyll — для публикации (сайт не показывается в поиске; GitHub Pages отдаёт файлы как есть).
 Скрытые профили ("hidden") в сборку не попадают.
 """
 import hashlib, json, os, re, shutil, sys, urllib.request, zipfile

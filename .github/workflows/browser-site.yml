@@ -1,0 +1,38 @@
+# Версия «в браузере» (browser/README.md): GitHub сам собирает сайт и выкладывает его на GitHub Pages.
+# Запускается при каждой отправке (Push) в ветку browser-lite или main; вручную — вкладка Actions → Run workflow.
+# Если версию «в браузере» удаляют — удалить и этот файл.
+name: Сайт «в браузере»
+
+on:
+  push:
+    branches: [browser-lite, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Сборка сайта (та же команда, что на компьютере автора)
+        run: ./browser/build.sh
+        env:
+          # контакт для «Сообщить автору»: Settings → Secrets and variables → Actions → Variables (можно не задавать)
+          SUPPORT_CONTACT: ${{ vars.SUPPORT_CONTACT }}
+      - uses: actions/configure-pages@v6
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: dist/browser
+      - id: deployment
+        uses: actions/deploy-pages@v5

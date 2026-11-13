@@ -30,7 +30,7 @@ Python вместе с конвертером загружается на стр
 | Собрать (после любой правки конвертера, шаблона или страницы) | `./browser/build.sh` |
 | Открыть у себя | `./browser/preview.sh`, затем http://localhost:8766 |
 | Проверить на тестовых презентациях | `./browser/tests/run.sh` |
-| Выложить на сайт | `./browser/publish.sh`, затем Commit и Push в GitHub Desktop (см. «Публикация») |
+| Выложить на сайт | Commit и Push ветки в GitHub Desktop — дальше GitHub собирает и публикует сам (см. «Публикация») |
 
 Сборка кладёт готовый сайт в `dist/browser/` (около 170 МБ; в git не попадает). Первый раз она скачивает
 Pyodide (~15 МБ) в `dist/browser-cache/`.
@@ -39,24 +39,25 @@ Pyodide (~15 МБ) в `dist/browser-cache/`.
 
 ## Публикация (GitHub Pages)
 
-Решение автора (13.11.2026): в шаблонах нет корпоративной тайны, сайт может быть публичным. Собранный сайт
-(~170 МБ) в основном репозитории не хранится: это результат сборки. Он публикуется в **отдельном публичном
-репозитории**, в котором лежит только содержимое `dist/browser/`: страница, три шаблона, код конвертера. Ключей и
-паролей в нём нет. Поисковикам сайт запрещён (`robots.txt`, `noindex`), но откроет его любой, у кого есть ссылка.
+Решение автора (13.11.2026): в шаблонах нет корпоративной тайны, репозиторий и сайт публичные, всё живёт в одном
+репозитории. Сайт собирает и выкладывает **сам GitHub**: при каждой отправке (Push) ветки `browser-lite` или `main`
+он выполняет `./browser/build.sh` и публикует результат (`.github/workflows/browser-site.yml`, 5–10 минут).
+Собранный сайт (~170 МБ) в репозитории не хранится. Поисковикам сайт запрещён (`robots.txt`, `noindex`),
+но откроет его любой, у кого есть ссылка.
 
-Один раз:
+Настроить один раз (на github.com, в репозитории):
 
-1. На github.com создать публичный репозиторий (например, `converter`) с галочкой «Add a README file».
-2. В GitHub Desktop: File → Clone repository → выбрать его. Запомнить папку, куда он склонирован.
-3. В проекте: `./browser/build.sh`, затем `./browser/publish.sh "/путь/к/той/папке"` (путь запоминается).
-4. В GitHub Desktop выбрать этот репозиторий → Commit to main → Push origin. Первый раз уходит ~170 МБ.
-   GitHub предупредит о двух файлах больше 50 МБ (базы шаблонов) — это нормально, запрет начинается со 100 МБ.
-5. На github.com в репозитории: Settings → Pages → Source «Deploy from a branch» → Branch `main`, папка `/ (root)` → Save.
-   Через 1–2 минуты сайт открыт по адресу `https://pv19th.github.io/<имя репозитория>/`.
+1. Settings → Pages → Build and deployment → Source: **GitHub Actions**.
+2. Settings → Environments → `github-pages` → Deployment branches and tags: добавить ветку `browser-lite`
+   (или выбрать «No restriction»). Без этого GitHub откажется выкладывать сайт не из `main`.
+3. Отправить ветку `browser-lite` (GitHub Desktop → Publish branch / Push origin).
+4. Вкладка Actions: дождаться зелёной галочки у «Сайт „в браузере“». Адрес сайта:
+   `https://pv19th.github.io/foxford-converter-presentation-pptx/`.
 
-Обновление сайта: `./browser/build.sh` → `./browser/tests/run.sh` → `./browser/publish.sh` → Commit и Push в GitHub Desktop.
-`publish.sh` заменяет содержимое папки сборкой; `README.md` и `CNAME` репозитория не трогает. В чужую папку
-(не пустую и без прошлой публикации) он копировать откажется.
+Обновление сайта: поправить → `./browser/build.sh` и `./browser/tests/run.sh` у себя → Commit и Push. Дальше GitHub сам.
+Красный крестик на вкладке Actions значит, что сборка не прошла и на сайте осталась прежняя версия.
+Контакт для «Сообщить автору» на опубликованном сайте: Settings → Secrets and variables → Actions → Variables →
+`SUPPORT_CONTACT` (он будет виден всем).
 
 Свой домен (`converterfoxkont.ru`, 13.11.2026 был свободен; в зоне .ru имя пишется только латиницей):
 
@@ -66,8 +67,6 @@ Pyodide (~15 МБ) в `dist/browser-cache/`.
    - запись типа `CNAME` для `www` → `pv19th.github.io`.
 3. На github.com: Settings → Pages → Custom domain → вписать домен → Save. Когда GitHub проверит DNS и выпустит
    сертификат (от часа до суток), поставить галочку «Enforce HTTPS».
-4. GitHub сам добавит в репозиторий файл `CNAME`. В GitHub Desktop нажать Fetch origin → Pull origin, чтобы он
-   появился в папке, — иначе следующий Push не пройдёт.
 
 Сначала проверить сайт на адресе `github.io`, потом привязать домен и только после этого рассылать ссылку коллегам.
 Перед рассылкой открыть сайт с рабочего компьютера одного из коллег.
@@ -81,7 +80,7 @@ Pyodide (~15 МБ) в `dist/browser-cache/`.
 | `web/index.html`, `web/app.js` | Страница. Форма — копия сайта (`app/web/`), без входа, превью и ИИ. Оформление — `app/web/static/style.css` сайта (копируется при сборке) и несколько строк в `web/lite.css` |
 | `web/worker.js` | Отдельный поток браузера, в котором работает Python, чтобы страница не замирала. На каждую презентацию — новый поток: так освобождается память |
 | `preview.sh` | Открыть собранную версию на своём компьютере |
-| `publish.sh` | Скопировать сборку в папку публичного репозитория для GitHub Pages |
+| `.github/workflows/browser-site.yml` (вне папки) | Указание GitHub: собрать сайт и выложить на GitHub Pages при отправке ветки |
 | `tests/` | Проверка: тот же Pyodide запускается без браузера (в Node) и прогоняет `test_inputs/` |
 
 Версии: Pyodide — в `build.py` (`PYODIDE`), `python-pptx` и `xlsxwriter` — из `constraints.txt`, как на сайте.
@@ -114,9 +113,9 @@ Pyodide (~15 МБ) в `dist/browser-cache/`.
 
 ## Как удалить
 
-1. Удалить папку `browser/`.
+1. Удалить папку `browser/` и файл `.github/workflows/browser-site.yml`.
 2. Удалить раздел «Версия в браузере» в `CLAUDE.md` и строку о ней в `README.md`.
-3. Если сайт был опубликован — удалить публичный репозиторий на github.com (Settings → Delete this repository) и его папку на компьютере.
+3. Если сайт был опубликован: на github.com Settings → Pages → Unpublish site (и убрать домен, если привязан).
 4. По желанию удалить локальные папки `dist/browser/`, `dist/browser-cache/`, `outputs/browser/` (в git их нет).
 
 Больше ничего: в `app/`, `converter/`, `tools/`, `tests/`, `desktop/` и `Dockerfile` для этой версии не менялось ни строки.
