@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex, nofollow">
+<title>Конвертер презентаций — Фоксфорд</title>
+<!-- Версия «в браузере»: упрощённая копия app/web/index.html — без входа, превью и ИИ (browser/README.md) -->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Iosevka+Charon+Mono:wght@400;700&display=swap">
+<link rel="stylesheet" href="style.css?v=0">
+<link rel="stylesheet" href="lite.css?v=0">
+</head>
+<body>
+<header class="top">
+  <nav class="top__side"><a href="./">Перенос</a></nav>
+  <a class="brand" href="./">Фоксфорд</a>
+  <div class="top__side top__side--right"></div>
+</header>
+<div class="subbar" id="templates" role="group" aria-label="Шаблон"><span class="subbar__label mono muted">Шаблон</span></div>
+
+<main>
+  <!-- 1. форма -->
+  <section id="view-form">
+    <div class="hero">
+      <h1>Перенос презентации</h1>
+      <p class="muted">Старая презентация урока → новый шаблон, сверка текста и памятка, что проверить.
+        Файл обрабатывается на вашем компьютере и никуда не отправляется.</p>
+    </div>
+    <form class="form" id="form" novalidate>
+      <div class="row">
+        <div class="row__label mono muted">01<b>Файл</b></div>
+        <div>
+          <label class="drop" id="drop" tabindex="0">
+            <input type="file" id="file" accept=".pptx" hidden>
+            <span class="drop__main" id="drop-main">Перетащите .pptx сюда</span>
+            <span class="mono muted" id="drop-sub">или нажмите, чтобы выбрать файл</span>
+          </label>
+        </div>
+      </div>
+      <div class="row" id="row-grade">
+        <div class="row__label mono muted">02<b>Класс</b></div>
+        <div class="seg" id="grades" role="group" aria-label="Класс"></div>
+      </div>
+      <div class="row" id="row-lesson">
+        <div class="row__label mono muted">03<b>Номер урока</b></div>
+        <div>
+          <div class="lesson"><span id="lesson-prefix">5.</span>
+            <input id="lesson" inputmode="numeric" maxlength="2" autocomplete="off" aria-label="Номер урока" placeholder="21"></div>
+          <p class="hint mono muted">Если номер есть в имени файла, он подставится сам</p>
+        </div>
+      </div>
+      <div class="row" id="row-subject">
+        <div class="row__label mono muted">04<b>Предмет</b></div>
+        <div>
+          <input class="field" id="subject" list="subjects" maxlength="40" autocomplete="off" aria-label="Предмет"
+                 placeholder="Например, Биология">
+          <datalist id="subjects"></datalist>
+          <p class="hint mono muted">Можно оставить пустым — предмет подставится из старой презентации</p>
+        </div>
+      </div>
+      <div id="choice-rows"></div>  <!-- варианты слайдов шаблона: титул, прощание… -->
+      <p class="error" id="form-error" role="alert" hidden></p>
+      <div class="actions">
+        <button class="btn btn--accent" id="submit" type="submit">Перенести в новый шаблон</button>
+      </div>
+    </form>
+  </section>
+
+  <!-- 2. обработка -->
+  <section id="view-progress" hidden>
+    <div class="hero"><h1>Обработка</h1></div>
+    <div class="panel">
+      <p class="mono muted" id="p-file"></p>
+      <p class="status" id="p-status" aria-live="polite"></p>
+      <p class="muted" id="p-sub"></p>
+      <div class="bar"><i id="p-bar"></i></div>
+      <ol class="steps" id="p-steps"></ol>
+      <p class="note muted">Не закрывайте и не обновляйте страницу: обработка идёт в этой вкладке.</p>
+    </div>
+  </section>
+
+  <!-- 3. ошибка -->
+  <section id="view-error" hidden>
+    <div class="hero"><h1>Не получилось</h1></div>
+    <div class="panel">
+      <p class="mono muted" id="e-file"></p>
+      <p id="e-message"></p>
+      <p class="muted" id="e-contact"></p>
+      <details class="lite-trace" id="e-details" hidden>
+        <summary class="mono muted">Подробности для автора</summary>
+        <pre id="e-trace"></pre>
+      </details>
+      <div class="actions"><button class="btn btn--accent" type="button" data-new>Попробовать ещё раз</button></div>
+    </div>
+  </section>
+
+  <!-- 4. результат -->
+  <section id="view-result" hidden>
+    <div class="hero"><h1>Готово</h1></div>
+    <div class="result-head">
+      <div>
+        <p class="mono muted" id="r-meta"></p>
+        <p class="file" id="r-file"></p>
+      </div>
+      <div class="actions" style="padding-top:0">
+        <a class="btn btn--accent" id="r-download" href="#">Скачать .pptx</a>
+        <button class="btn" type="button" data-new>Новая презентация</button>
+      </div>
+    </div>
+    <p class="muted lite-note">Превью слайдов в этой версии нет: откройте скачанный файл в PowerPoint и просмотрите
+      слайды из списка «Проверьте слайды». Файл хранится только в этой вкладке — скачайте его до того, как закроете её.</p>
+    <div class="cols">
+      <div class="col"><h2>Проверьте слайды</h2><div id="r-checks"></div></div>
+      <div class="col"><h2>Сверка текста</h2><div id="r-words"></div></div>
+    </div>
+    <div class="checks">
+      <h2>Проверьте вручную</h2>
+      <p class="muted" style="margin:-8px 0 16px">Этого конвертер не делает сам. Отметки — только для вас, они не сохраняются.</p>
+      <ul id="r-manual"></ul>
+    </div>
+  </section>
+</main>
+
+<script src="app.js?v=0"></script>
+</body>
+</html>

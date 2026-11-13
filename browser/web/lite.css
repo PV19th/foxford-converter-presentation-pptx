@@ -1,0 +1,9 @@
+/* Версия «в браузере»: то немногое, чего нет в оформлении сайта (app/web/static/style.css) */
+.lite-note { margin: 0; padding: 20px 0; border-bottom: 1px solid var(--line); max-width: none; }
+/* номер слайда в списке «Проверьте слайды» — подпись, а не кнопка: превью здесь нет */
+.slide-no { font-family: var(--mono); font-size: 12px; letter-spacing: .02em; text-transform: uppercase; margin-right: 10px; }
+/* ошибка: подробности для автора (журнала, как на сайте, здесь нет) */
+.lite-trace { margin-top: 16px; }
+.lite-trace summary { cursor: pointer; }
+.lite-trace pre { margin: 12px 0 0; padding: 12px; border: 1px solid var(--hair); font: 12px/1.5 var(--mono);
+                  white-space: pre-wrap; word-break: break-word; max-height: 240px; overflow: auto; }
