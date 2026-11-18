@@ -1,11 +1,11 @@
 # Версия «в браузере» (browser/README.md): GitHub сам собирает сайт и выкладывает его на GitHub Pages.
-# Запускается при каждой отправке (Push) в ветку browser-lite или main; вручную — вкладка Actions → Run workflow.
+# Запускается при каждой отправке (Push) ветки main; вручную — вкладка Actions → Run workflow.
 # Если версию «в браузере» удаляют — удалить и этот файл.
 name: Сайт «в браузере»
 
 on:
   push:
-    branches: [browser-lite, main]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
