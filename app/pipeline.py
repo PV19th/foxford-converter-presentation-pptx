@@ -308,8 +308,7 @@ def check_input(path, profile=None):
     themes = themes_of(path)
     # тема нового шаблона называется «Шаблон 5–11 (2026) — Фоксфорд»; у индивидуальных — "done_theme" профиля
     done = ['Шаблон 5–11 (2026)'] + ([profile['done_theme']] if profile and profile.get('done_theme') else [])
-    if any(t in themes for t in done):
-        raise ConversionError('Похоже, эта презентация уже в новом шаблоне. Загрузите старую версию урока.')
+    return any(t in themes for t in done)
 
 
 def check_choices(profile, choices):
@@ -338,13 +337,16 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     else:
         lesson = ''
     check_choices(profile, choices)
-    check_input(src, profile)
+    has_new_slides = check_input(src, profile)
     source = outdir / 'source.pptx'
     if Path(src).resolve() != source.resolve(): shutil.copyfile(src, source)
     raw, result = outdir / 'converted.pptx', outdir / 'result.pptx'
 
     progress('convert')
     extra_checks = []
+    if has_new_slides:
+        extra_checks.append({'slide': None, 'text': 'В презентации найдены слайды нового шаблона. Они будут обработаны вместе '
+                                                    'со старыми — проверьте их в готовом файле.'})
     if profile.get('engine') == 'reskin':  # индивидуальный шаблон: перенос «пересадкой» (app/reskin.py)
         from . import reskin
         try:
