@@ -305,10 +305,17 @@ def check_input(path, profile=None):
     with zipfile.ZipFile(path) as z:
         if 'ppt/presentation.xml' not in z.namelist():
             raise ConversionError('Файл не похож на презентацию PowerPoint (.pptx).')
-    themes = themes_of(path)
+    from pptx import Presentation
+    from pptx.opc.constants import RELATIONSHIP_TYPE as RT
     # тема нового шаблона называется «Шаблон 5–11 (2026) — Фоксфорд»; у индивидуальных — "done_theme" профиля
     done = ['Шаблон 5–11 (2026)'] + ([profile['done_theme']] if profile and profile.get('done_theme') else [])
-    return any(t in themes for t in done)
+    out = []
+    for n, slide in enumerate(Presentation(path).slides, 1):
+        master = slide.slide_layout.slide_master
+        theme = master.part.part_related_by(RT.THEME).blob.decode('utf8', 'replace')
+        if any(t in theme for t in done):
+            out.append(n)
+    return out
 
 
 def check_choices(profile, choices):
@@ -337,16 +344,17 @@ def process(src, outdir, lesson, template=DEFAULT_TEMPLATE, progress=lambda step
     else:
         lesson = ''
     check_choices(profile, choices)
-    has_new_slides = check_input(src, profile)
+    new_slides = check_input(src, profile)
     source = outdir / 'source.pptx'
     if Path(src).resolve() != source.resolve(): shutil.copyfile(src, source)
     raw, result = outdir / 'converted.pptx', outdir / 'result.pptx'
 
     progress('convert')
     extra_checks = []
-    if has_new_slides:
-        extra_checks.append({'slide': None, 'text': 'В презентации найдены слайды нового шаблона. Они будут обработаны вместе '
-                                                    'со старыми — проверьте их в готовом файле.'})
+    if new_slides:
+        text = ('В презентации найдены слайды нового шаблона: %s. Они обработаны вместе со старыми — '
+                'проверьте их в готовом файле.') % ', '.join(map(str, new_slides))
+        extra_checks.append({'slide': None, 'text': text})
     if profile.get('engine') == 'reskin':  # индивидуальный шаблон: перенос «пересадкой» (app/reskin.py)
         from . import reskin
         try:
