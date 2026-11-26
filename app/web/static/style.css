@@ -1,5 +1,6 @@
 /* Конвертер презентаций. Минимализм: белое, чёрное, тонкие линии, один акцент. */
 :root {
+  color-scheme: light;
   --bg: #fff;
   --ink: #000;
   --muted: #6e6e6e;
@@ -7,6 +8,7 @@
   --hair: #e3e3e3;
   --soft: #f4f4f4;
   --accent: #f96300;
+  --accent-hover: #d95600;
   --accent-ink: #fff;
   --error: #c4320a;
   /* весь сайт — Iosevka Charon Mono (Google Fonts, открытая лицензия OFL) */
@@ -15,11 +17,24 @@
   --gutter: 24px;
 }
 
+html[data-theme="dark"] {
+  color-scheme: dark;
+  --bg: #101010;
+  --ink: #f7f7f7;
+  --muted: #aaa;
+  --line: #f7f7f7;
+  --hair: #343434;
+  --soft: #1c1c1c;
+  --accent-hover: #ff7a1f;
+  --error: #ff7663;
+}
+
 * { box-sizing: border-box; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--ink); font: 15px/1.5 var(--sans); }
 button, input, select { font: inherit; color: inherit; }
 a { color: inherit; }
+::placeholder { color: var(--muted); opacity: 1; }
 [hidden] { display: none !important; }
 
 .mono { font-family: var(--mono); font-size: 12px; letter-spacing: .02em; text-transform: uppercase; }
@@ -108,7 +123,7 @@ h2 { font-size: 15px; font-weight: 700; letter-spacing: .08em; text-transform: u
        border: 1px solid var(--ink); background: none; cursor: pointer; text-decoration: none;
        text-transform: uppercase; letter-spacing: .08em; font-size: 13px; font-weight: 700; }
 .btn--accent { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
-.btn--accent:hover { background: #d95600; border-color: #d95600; }
+.btn--accent:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
 .btn:not(.btn--accent):hover { background: var(--ink); color: var(--bg); }
 .btn:disabled { opacity: .4; cursor: default; }
 .btn:focus-visible { outline: 2px solid var(--ink); outline-offset: 2px; }

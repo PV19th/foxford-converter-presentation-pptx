@@ -103,6 +103,7 @@ def main():
 
     web = Path(__file__).resolve().parent / 'web'
     shutil.copy(ROOT / 'app/web/static/style.css', OUT / 'style.css')
+    shutil.copy(ROOT / 'app/web/static/theme.js', OUT / 'theme.js')
     for f in web.iterdir():
         if f.name != 'index.html' and not f.name.startswith('.'): shutil.copy(f, OUT / f.name)
     # версия сборки стоит в адресах файлов (?v=…): после обновления браузер не возьмёт старую копию из кеша
